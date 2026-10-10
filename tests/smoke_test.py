@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 from databricks.sdk import WorkspaceClient
@@ -52,6 +53,23 @@ def row_count(w: WorkspaceClient, message) -> int:
     return 0
 
 
+DONE = {"COMPLETED", "FAILED", "CANCELLED", "QUERY_RESULT_EXPIRED"}
+HINT = ("Genie runs the question as this job's service principal: it needs CAN USE on the space's SQL warehouse "
+        "and USE CATALOG / USE SCHEMA / SELECT on the space's tables (and EXECUTE on its functions).")
+
+
+def ask(w: WorkspaceClient, space_id: str, question: str, timeout_s: int = 300):
+    """Ask a question; return the final message (also when Genie fails, so its error can be shown)."""
+    started = w.genie.start_conversation(space_id, question).response
+    deadline = time.time() + timeout_s
+    while True:
+        message = w.genie.get_message(space_id, started.conversation_id, started.message_id)
+        status = getattr(message.status, "value", message.status)
+        if status in DONE or time.time() > deadline:
+            return message, status
+        time.sleep(3)
+
+
 def main() -> int:
     space_id = os.environ.get("GENIE_SPACE_ID")
     if not space_id:
@@ -59,14 +77,16 @@ def main() -> int:
     w = WorkspaceClient()
     failures = []
     for question in questions():
-        message = w.genie.start_conversation_and_wait(space_id, question)
-        status = getattr(message.status, "value", message.status)
+        message, status = ask(w, space_id, question)
         rows = row_count(w, message) if status == "COMPLETED" else 0
         print(f"[{'PASS' if rows else 'FAIL'}] {question}  ({status}, {rows} row(s))")
+        if message.error is not None:
+            kind = getattr(message.error.type, "value", message.error.type)
+            print(f"       Genie error ({kind}): {message.error.error}")
         if not rows:
             failures.append(question)
     if failures:
-        print(f"\nSMOKE TEST FAILED: no usable answer for {len(failures)} question(s)")
+        print(f"\nSMOKE TEST FAILED: no usable answer for {len(failures)} question(s).\n{HINT}")
         return 1
     print("\nAll smoke questions answered.")
     return 0
