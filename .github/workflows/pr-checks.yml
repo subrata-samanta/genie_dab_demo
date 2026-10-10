@@ -1,0 +1,79 @@
+# Checks on every pull request into main. Make "format" and "validate" required checks (branch protection),
+# so nothing broken can be merged. For the dev-sync pull request, the benchmarks also run on the dev space,
+# which holds exactly the pull request's content, so the reviewer sees the accuracy before merging.
+name: "PR checks"
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  format:
+    name: format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --quiet pyyaml
+      - name: Space JSON checks
+        run: python scripts/check_space.py
+      - name: What this pull request changes
+        env:
+          BASE: ${{ github.base_ref }}
+        run: |
+          git show "origin/$BASE:src/genie_space.geniespace.json" > "$RUNNER_TEMP/base.json" 2> /dev/null || : > "$RUNNER_TEMP/base.json"
+          { echo "### What changes in the Genie space"; echo
+            python scripts/describe_changes.py "$RUNNER_TEMP/base.json" src/genie_space.geniespace.json; } >> "$GITHUB_STEP_SUMMARY"
+
+  validate:
+    name: validate
+    runs-on: ubuntu-latest
+    environment: dev
+    env:
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+      DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+      DATABRICKS_AUTH_TYPE: ${{ secrets.DATABRICKS_CLIENT_SECRET != '' && 'oauth-m2m' || 'github-oidc' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@v1.20.0
+      - name: bundle validate (dev)
+        run: databricks bundle validate -t dev
+
+  dev-benchmarks:
+    name: dev benchmarks
+    if: github.head_ref == 'genie/dev-sync'
+    needs: [format, validate]
+    runs-on: ubuntu-latest
+    environment: dev
+    env:
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+      DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+      DATABRICKS_AUTH_TYPE: ${{ secrets.DATABRICKS_CLIENT_SECRET != '' && 'oauth-m2m' || 'github-oidc' }}
+      ACCURACY_THRESHOLD: ${{ vars.ACCURACY_THRESHOLD || '0.80' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@v1.20.0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --quiet databricks-sdk pyyaml
+      - name: Does the dev space still hold exactly this pull request?
+        id: live
+        run: |
+          databricks bundle plan -t dev -o json > "$RUNNER_TEMP/plan.json"
+          python scripts/deploy_guard.py "$RUNNER_TEMP/plan.json" --live-matches
+      - name: Benchmarks on the dev space
+        if: steps.live.outputs.matches == 'true'
+        run: |
+          export GENIE_SPACE_ID=$(databricks bundle summary -t dev -o json | jq -r '.resources.genie_spaces.genie_space.id')
+          python tests/benchmark_gate.py

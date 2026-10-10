@@ -1,0 +1,173 @@
+# Promote what is on main: dev -> QA (benchmark gate) -> prod (approval).
+#
+#   push to main (a merged pull request)   check -> dev (+ smoke test) -> QA (+ benchmark gate)
+#   Run workflow, target dev                check -> dev                  (with "discard dev edits": reject them)
+#   Run workflow, target qa                 check -> QA (+ benchmark gate)
+#   Run workflow, target prod               check -> QA (+ benchmark gate) -> approval -> prod (+ smoke test, tag)
+#
+# Prod therefore always gets a version that passed the QA gate in the same run, and every prod deployment is
+# tagged genie-prod-<time>. Rollback: Run workflow from an earlier genie-prod-* tag ("Use workflow from"), target prod.
+name: "3 · Release: dev → QA → prod"
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "resources/**"
+      - "databricks.yml"
+      - "scripts/**"
+      - "tests/**"
+      - ".github/workflows/release.yml"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Deploy up to"
+        required: true
+        default: prod
+        type: choice
+        options: [dev, qa, prod]
+      discard_dev_edits:
+        description: "dev only: overwrite UI edits in the dev space that are not in git (rejects them)"
+        type: boolean
+        default: false
+      overwrite_prod_edits:
+        description: "prod only: deploy even though someone edited the prod space in the UI (their edit is lost)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write          # the genie-prod-* tag
+  id-token: write          # passwordless login to Databricks (workload identity federation)
+
+concurrency:
+  group: genie-release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.ready.outputs.ready }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --quiet pyyaml
+      - name: Space JSON checks
+        id: ready
+        run: |
+          if [ ! -f src/genie_space.geniespace.json ]; then
+            echo "Not bootstrapped yet (run the bootstrap workflow): nothing to release."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          python scripts/check_space.py
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+  dev:
+    needs: check
+    if: needs.check.outputs.ready == 'true' && (github.event_name == 'push' || inputs.target == 'dev')
+    runs-on: ubuntu-latest
+    environment: dev
+    concurrency:
+      group: genie-dev            # never at the same time as a dev sync
+      cancel-in-progress: false
+    env:
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+      DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+      DATABRICKS_AUTH_TYPE: ${{ secrets.DATABRICKS_CLIENT_SECRET != '' && 'oauth-m2m' || 'github-oidc' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@v1.20.0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --quiet databricks-sdk pyyaml
+      - name: Check the live dev space
+        id: guard
+        env:
+          POLICY: ${{ inputs.discard_dev_edits && 'overwrite' || 'keep' }}
+        run: |
+          databricks bundle plan -t dev -o json > "$RUNNER_TEMP/plan.json"
+          python scripts/deploy_guard.py "$RUNNER_TEMP/plan.json" --on-ui-edits "$POLICY"
+      - name: bundle deploy -t dev
+        if: steps.guard.outputs.deploy == 'true'
+        run: databricks bundle deploy -t dev --auto-approve
+      - name: Smoke test
+        run: |
+          export GENIE_SPACE_ID=$(databricks bundle summary -t dev -o json | jq -r '.resources.genie_spaces.genie_space.id')
+          python tests/smoke_test.py
+
+  qa:
+    needs: [check, dev]
+    if: >-
+      ${{ !cancelled() && needs.check.outputs.ready == 'true' && needs.dev.result != 'failure' &&
+          (github.event_name == 'push' || inputs.target == 'qa' || inputs.target == 'prod') }}
+    runs-on: ubuntu-latest
+    environment: qa
+    env:
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+      DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+      DATABRICKS_AUTH_TYPE: ${{ secrets.DATABRICKS_CLIENT_SECRET != '' && 'oauth-m2m' || 'github-oidc' }}
+      ACCURACY_THRESHOLD: ${{ vars.ACCURACY_THRESHOLD || '0.80' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@v1.20.0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --quiet databricks-sdk pyyaml
+      - name: Point the space at the QA catalog
+        run: bash scripts/set_catalog.sh qa
+      - name: Check the live QA space
+        run: |
+          databricks bundle plan -t qa -o json > "$RUNNER_TEMP/plan.json"
+          python scripts/deploy_guard.py "$RUNNER_TEMP/plan.json" --on-ui-edits overwrite
+      - name: bundle deploy -t qa
+        run: databricks bundle deploy -t qa --auto-approve
+      - name: Benchmark gate
+        run: |
+          export GENIE_SPACE_ID=$(databricks bundle summary -t qa -o json | jq -r '.resources.genie_spaces.genie_space.id')
+          python tests/benchmark_gate.py
+
+  prod:
+    needs: qa
+    if: ${{ !cancelled() && needs.qa.result == 'success' && github.event_name == 'workflow_dispatch' && inputs.target == 'prod' }}
+    runs-on: ubuntu-latest
+    environment: prod            # required reviewers approve here
+    env:
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+      DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+      DATABRICKS_AUTH_TYPE: ${{ secrets.DATABRICKS_CLIENT_SECRET != '' && 'oauth-m2m' || 'github-oidc' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@v1.20.0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --quiet databricks-sdk pyyaml
+      - name: Point the space at the prod catalog
+        run: bash scripts/set_catalog.sh prod
+      - name: Check the live prod space
+        env:
+          POLICY: ${{ inputs.overwrite_prod_edits && 'overwrite' || 'refuse' }}
+        run: |
+          databricks bundle plan -t prod -o json > "$RUNNER_TEMP/plan.json"
+          python scripts/deploy_guard.py "$RUNNER_TEMP/plan.json" --on-ui-edits "$POLICY"
+      - name: bundle deploy -t prod
+        run: databricks bundle deploy -t prod --auto-approve
+      - name: Smoke test
+        run: |
+          export GENIE_SPACE_ID=$(databricks bundle summary -t prod -o json | jq -r '.resources.genie_spaces.genie_space.id')
+          python tests/smoke_test.py
+      - name: Tag the release
+        run: |
+          tag="genie-prod-$(date -u '+%Y%m%d-%H%M%S')"
+          git tag "$tag"
+          git push -q origin "$tag"
+          echo "Prod runs $(git rev-parse --short HEAD), tagged $tag" | tee -a "$GITHUB_STEP_SUMMARY"

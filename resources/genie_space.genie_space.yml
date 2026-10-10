@@ -1,0 +1,19 @@
+# The Genie space. Its content (data sources, instructions, example SQL, benchmarks...) is the JSON file,
+# which the workflows write: never edit it by hand while editors are working in the dev UI.
+#
+# This file has the name `bundle generate genie-space --key genie_space` writes, so the bootstrap workflow
+# can export the existing space and then put this version back.
+resources:
+  genie_spaces:
+    genie_space:
+      title: ${var.space_title}${var.title_suffix}
+      description: ${var.space_description}
+      file_path: ../src/genie_space.geniespace.json
+      warehouse_id: ${var.warehouse_id}
+      # Deploying sets exactly these permissions (plus CAN_MANAGE for the deploying service principal).
+      # Users also need SELECT on the tables: Genie runs every query as the person asking.
+      permissions:
+        - level: CAN_RUN
+          group_name: ${var.business_users_group}
+        - level: ${var.editors_level}
+          group_name: ${var.editors_group}

@@ -1,0 +1,79 @@
+# =============================================================================
+# Genie space as code: one Genie space, versioned in git, promoted dev -> qa -> prod
+# by GitHub Actions with `databricks bundle deploy` (Declarative Automation Bundles).
+#
+#   resources/genie_space.genie_space.yml   the space: title, warehouse, permissions, file_path
+#   src/genie_space.geniespace.json         the space's content, exported from the dev space
+#                                           (written by the bootstrap and dev-sync workflows)
+#
+# Genie spaces need the direct deployment engine and Databricks CLI 1.3+ (1.14+ pinned here).
+# No host or credentials here: GitHub Actions provides them per GitHub environment (README.md).
+# =============================================================================
+
+bundle:
+  name: genie-dab-demo
+  engine: direct
+  databricks_cli_version: ">= 1.14.0"
+
+include:
+  - resources/*.yml
+
+variables:
+  space_title:
+    description: Title of the Genie space; each environment adds its title_suffix.
+    default: "FreshCart Sales & Stock Assistant"
+  space_description:
+    description: Description shown in the Genie space.
+    default: >-
+      Ask about sales, margin, baskets, promotions and stock across FreshCart stores and online.
+  title_suffix:
+    description: Appended to the title so environments can't be confused.
+    default: ""
+  dev_catalog:
+    description: >-
+      The catalog the dev space reads. The JSON is exported from dev, so its tables are written with this
+      catalog; scripts/set_catalog.sh swaps it for the target's `catalog` before deploying to qa or prod.
+    default: freshcart_dev
+  catalog:
+    description: This environment's catalog.
+  warehouse_id:
+    description: SQL warehouse the space runs on, looked up by name in each workspace.
+    lookup:
+      warehouse: "Serverless Starter Warehouse"
+  business_users_group:
+    description: Group that asks questions in the space (CAN_RUN).
+    default: freshcart-business-users
+  editors_group:
+    description: Group of the (non-technical) people who improve the space in the dev Genie UI.
+    default: freshcart-genie-editors
+  editors_level:
+    description: The editors' permission in this environment; they may only edit in dev.
+    default: CAN_RUN
+
+targets:
+  # The shared dev space the editors work in. It is the existing space, adopted once by the bootstrap
+  # workflow (`bundle generate --existing-id` + `bundle deployment bind`), so it keeps its URL and history.
+  dev:
+    default: true
+    mode: production
+    workspace:
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      catalog: freshcart_dev
+      title_suffix: " [DEV]"
+      editors_level: CAN_EDIT
+
+  qa:
+    mode: production
+    workspace:
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      catalog: freshcart_qa
+      title_suffix: " [QA]"
+
+  prod:
+    mode: production
+    workspace:
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      catalog: freshcart

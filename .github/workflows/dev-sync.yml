@@ -1,0 +1,110 @@
+# Bring the editors' changes from the dev Genie UI into git, without them touching git.
+#
+# Every hour (or when someone clicks "Run workflow"), export the dev space. If it differs from main, open a
+# pull request (or update the open one) that lists the changes in plain words. A reviewer merges it; the
+# release workflow then deploys it. If the dev space matches main again, the open pull request is closed.
+name: "2 · Sync dev edits into a pull request"
+
+on:
+  schedule:
+    - cron: "7 * * * *"          # hourly, at minute 7
+  workflow_dispatch:              # the "Run workflow" button: sync now
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+concurrency:
+  group: genie-dev
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    environment: dev
+    env:
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+      DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+      DATABRICKS_AUTH_TYPE: ${{ secrets.DATABRICKS_CLIENT_SECRET != '' && 'oauth-m2m' || 'github-oidc' }}
+      # A token of a GitHub App or bot account, so the pull request starts its checks. With the default
+      # GITHUB_TOKEN, GitHub does not run workflows on pull requests that a workflow opened.
+      GH_TOKEN: ${{ secrets.GENIE_BOT_TOKEN || github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GENIE_BOT_TOKEN || github.token }}
+
+      - name: Is the repository set up?
+        id: ready
+        run: |
+          if [ ! -f src/genie_space.geniespace.json ] || [ -z "$DATABRICKS_HOST" ]; then
+            echo "Not set up yet (run the bootstrap workflow, set the dev environment's variables): nothing to do."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: databricks/setup-cli@v1.20.0
+        if: steps.ready.outputs.ok == 'true'
+      - uses: actions/setup-python@v5
+        if: steps.ready.outputs.ok == 'true'
+        with:
+          python-version: "3.12"
+      - if: steps.ready.outputs.ok == 'true'
+        run: pip install --quiet pyyaml
+
+      - name: Export the dev space
+        id: export
+        if: steps.ready.outputs.ok == 'true'
+        run: |
+          cp src/genie_space.geniespace.json "$RUNNER_TEMP/main.json"
+          databricks bundle generate genie-space --resource genie_space --force -t dev
+          python scripts/describe_changes.py "$RUNNER_TEMP/main.json" src/genie_space.geniespace.json > "$RUNNER_TEMP/changes.md"
+          if git diff --quiet -- src/; then
+            echo "The dev space matches main."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            cat "$RUNNER_TEMP/changes.md"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "count=$(grep -c '^- ' "$RUNNER_TEMP/changes.md")" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open or update the pull request
+        if: steps.export.outputs.changed == 'true'
+        env:
+          TRIGGER: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
+          COUNT: ${{ steps.export.outputs.count }}
+        run: |
+          if git rev-parse -q --verify "origin/genie/dev-sync" > /dev/null && git diff --quiet "origin/genie/dev-sync" -- src/; then
+            echo "The open pull request already has exactly these changes: nothing to update."
+            exit 0
+          fi
+          when="$(date -u '+%Y-%m-%d %H:%M UTC')"
+          {
+            echo "## Changes made in the dev Genie space"
+            echo
+            if [ "$TRIGGER" = "workflow_dispatch" ]; then echo "Captured at $when, on request of @$ACTOR."
+            else echo "Captured automatically at $when."; fi
+            echo
+            cat "$RUNNER_TEMP/changes.md"
+            echo
+            echo "---"
+            echo "**Reviewer:** check the changes above and this pull request's checks (format checks and the"
+            echo "benchmark results on the dev space). Merging deploys to dev and promotes to QA if its benchmarks pass."
+            echo "New edits in dev update this pull request automatically. To reject a change, have it undone in"
+            echo "the dev space, or run *3 · Release* with target \`dev\` and *discard dev edits*."
+          } > "$RUNNER_TEMP/body.md"
+          bash scripts/open_pr.sh genie/dev-sync "Genie dev changes ($COUNT)" "$RUNNER_TEMP/body.md" \
+            "Genie dev UI changes ($COUNT), captured $when"
+
+      - name: Close the pull request if the dev space matches main again
+        if: steps.export.outputs.changed == 'false'
+        run: |
+          number="$(gh pr list --head genie/dev-sync --state open --json number | jq -r '.[0].number // empty')"
+          if [ -n "$number" ]; then
+            gh pr close "$number" --delete-branch --comment "The dev space matches main again: nothing left to merge."
+          fi

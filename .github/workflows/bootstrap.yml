@@ -1,0 +1,79 @@
+# One time: put the existing dev Genie space under version control.
+#
+# Exports the space (`bundle generate genie-space --existing-id`), adopts it (`bundle deployment bind`, so it
+# keeps its URL, ID and conversations) and opens a pull request with its first version. Merging that pull
+# request starts the release workflow.
+name: "1 · Bootstrap: adopt the existing dev space"
+
+on:
+  workflow_dispatch:
+    inputs:
+      space_id:
+        description: "ID of the existing dev Genie space (the last part of its URL: .../genie/rooms/<id>)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write          # passwordless login to Databricks (workload identity federation)
+
+concurrency:
+  group: genie-dev
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    environment: dev
+    env:
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+      DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+      DATABRICKS_AUTH_TYPE: ${{ secrets.DATABRICKS_CLIENT_SECRET != '' && 'oauth-m2m' || 'github-oidc' }}
+      SPACE_ID: ${{ inputs.space_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GENIE_BOT_TOKEN || github.token }}
+      - uses: databricks/setup-cli@v1.20.0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --quiet pyyaml
+
+      - name: Stop if the space is already under version control
+        run: |
+          if [ -f src/genie_space.geniespace.json ]; then
+            echo "::error::src/genie_space.geniespace.json already exists on main: the space is already bootstrapped."
+            exit 1
+          fi
+
+      - name: Export the existing dev space
+        run: |
+          # generate writes both the JSON and a resource file; keep this repository's resource file
+          mv resources/genie_space.genie_space.yml "$RUNNER_TEMP/genie_space.genie_space.yml"
+          databricks bundle generate genie-space --existing-id "$SPACE_ID" --key genie_space --force -t dev
+          cp "$RUNNER_TEMP/genie_space.genie_space.yml" resources/genie_space.genie_space.yml
+          python scripts/check_space.py
+
+      - name: Adopt the space (bind), so the bundle updates it instead of creating a new one
+        run: databricks bundle deployment bind genie_space "$SPACE_ID" -t dev --auto-approve
+
+      - name: Open the pull request with the first version
+        env:
+          GH_TOKEN: ${{ secrets.GENIE_BOT_TOKEN || github.token }}
+        run: |
+          {
+            echo "## First version of the Genie space, exported from the dev space \`$SPACE_ID\`"
+            echo
+            echo "Merging this pull request puts the space under version control and starts the release"
+            echo "workflow: the dev space gets this repository's title and permissions, then QA is created"
+            echo "and benchmark-tested."
+            echo
+            echo "### Content"
+            python scripts/describe_changes.py /dev/null src/genie_space.geniespace.json
+          } > "$RUNNER_TEMP/body.md"
+          bash scripts/open_pr.sh genie/bootstrap "Genie space: first version from dev" "$RUNNER_TEMP/body.md" \
+            "Genie space: first version, exported from the dev space $SPACE_ID"
