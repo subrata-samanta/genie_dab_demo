@@ -83,13 +83,14 @@ The pull request shows each change in words (➕ added, ➖ removed, ✏️ chan
    Databricks SQL access, `CAN USE` on the warehouse, and `USE CATALOG` / `USE SCHEMA` / `SELECT` on that
    environment's catalog (the smoke test and the benchmarks run queries as it).
    **In dev also `CAN MANAGE` on the existing dev space** (so it can adopt and update it).
-4. **Groups**: the business users (`CAN_RUN`, plus `SELECT` on the data) and the editors (`CAN_EDIT` in dev).
-   Deploying sets the space's permissions to exactly those of `resources/genie_space.genie_space.yml`, so grant
-   access through these groups, not to individuals.
+4. **Sharing**: the bundle does not manage who can use the spaces (no `permissions:` in
+   `resources/genie_space.genie_space.yml` for now). The dev space keeps its sharing. QA and prod are created
+   by the service principal, so share them once by hand (Share → *Can run* for users, who also need `SELECT`
+   on the data). To manage access as code later, see the comment in that file.
 
 ### 2. This repository
-Edit `databricks.yml`: `space_title`, `space_description`, `dev_catalog` and each target's `catalog`, the
-warehouse name, the group names.
+Edit `databricks.yml`: `dev_catalog` and each target's `catalog`, and the warehouse name. The title and
+description are in `resources/genie_space.genie_space.yml`.
 
 ### 3. GitHub settings
 | Setting | Value |
@@ -105,7 +106,7 @@ warehouse name, the group names.
 ### 4. Adopt the existing dev space
 **Actions → 1 · Bootstrap → Run workflow** with the dev space's id (the last part of its URL,
 `.../genie/rooms/<id>`). Review and merge the pull request it opens. The release workflow then gives the dev space
-this repository's title and permissions and creates QA. From here on, editors just edit dev.
+this repository's title and creates QA. From here on, editors just edit dev.
 
 ---
 
@@ -135,7 +136,7 @@ this repository's title and permissions and creates QA. From here on, editors ju
 ## Files
 ```
 databricks.yml                          bundle, variables, targets dev / qa / prod
-resources/genie_space.genie_space.yml   the Genie space resource: title, warehouse, permissions, file_path
+resources/genie_space.genie_space.yml   the Genie space resource: title, warehouse, file_path
 src/genie_space.geniespace.json         the space's content (written by the workflows; created by bootstrap)
 scripts/check_space.py                  format checks of the JSON
 scripts/describe_changes.py             the plain-words change list in pull requests

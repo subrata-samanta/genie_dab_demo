@@ -6,14 +6,15 @@
 resources:
   genie_spaces:
     genie_space:
-      title: ${var.space_title}${var.title_suffix}
-      description: ${var.space_description}
+      title: "FreshCart Sales & Stock Assistant${var.title_suffix}"
+      description: "Ask about sales, margin, baskets, promotions and stock across FreshCart stores and online."
       file_path: ../src/genie_space.geniespace.json
       warehouse_id: ${var.warehouse_id}
-      # Deploying sets exactly these permissions (plus CAN_MANAGE for the deploying service principal).
-      # Users also need SELECT on the tables: Genie runs every query as the person asking.
-      permissions:
-        - level: CAN_RUN
-          group_name: ${var.business_users_group}
-        - level: ${var.editors_level}
-          group_name: ${var.editors_group}
+      # No `permissions:` for now: the bundle leaves the space's sharing alone (share QA and prod by hand,
+      # like any Genie space). To manage access as code later, add for example:
+      #   permissions:
+      #     - level: CAN_RUN
+      #       group_name: <group of the business users>
+      #     - level: CAN_EDIT          # dev only, via a variable per target
+      #       group_name: <group of the editors>
+      # Deploying then sets exactly these permissions, so the groups must exist first.
