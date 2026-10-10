@@ -53,7 +53,7 @@ The pull request shows each change in words (➕ added, ➖ removed, ✏️ chan
 
 | Check | Meaning |
 |---|---|
-| **format** | the JSON is valid, ids and sorting are what Genie expects, tables use the dev catalog |
+| **format** | the JSON is valid and formatted as Databricks exports it, ids are valid, tables use the dev catalog |
 | **validate** | `databricks bundle validate` against dev |
 | **dev benchmarks** | the benchmark questions, run on the dev space (which holds exactly this pull request); accuracy must reach the threshold (80% by default) |
 

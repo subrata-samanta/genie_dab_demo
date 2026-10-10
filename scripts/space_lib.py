@@ -48,6 +48,22 @@ def normalise(value):
     return value
 
 
+def order_differences(value, path: str = "") -> list[str]:
+    """Paths of lists whose order differs from normalise() (information only: Databricks' export order is fine)."""
+    out = []
+    if isinstance(value, dict):
+        for k, v in value.items():
+            out += order_differences(v, f"{path}.{k}" if path else k)
+    elif isinstance(value, list):
+        for i, v in enumerate(value):
+            out += order_differences(v, f"{path}[{i}]")
+        if value and all(isinstance(v, dict) for v in value):
+            key = next((k for k in _SORT_KEYS if all(k in v for v in value)), None)
+            if key and [str(v[key]) for v in value] != sorted(str(v[key]) for v in value):
+                out.append(f"{path} (not in {key} order)")
+    return out
+
+
 def get(space: dict, path: tuple) -> list:
     node = space
     for key in path:

@@ -1,7 +1,8 @@
 """What changed between two versions of the space, in words a reviewer (or the editor) understands.
 
     python scripts/describe_changes.py OLD.json NEW.json        # prints Markdown
-OLD may be missing or empty (first version).
+    python scripts/describe_changes.py --same OLD.json NEW.json # exit 0 if the content is the same
+OLD may be missing or empty (first version). List order is ignored: only content counts.
 """
 from __future__ import annotations
 
@@ -58,12 +59,17 @@ def markdown(found: list[dict]) -> str:
 
 def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    same_mode = argv[:1] == ["--same"]
+    argv = argv[1:] if same_mode else argv
     if len(argv) != 2:
         print(__doc__)
         return 2
     old_path, new_path = (Path(a) for a in argv)
     old = S.load(old_path) if old_path.exists() and old_path.stat().st_size else {}
-    print(markdown(changes(old, S.load(new_path))), end="")
+    found = changes(old, S.load(new_path))
+    if same_mode:
+        return 0 if not found else 1
+    print(markdown(found), end="")
     return 0
 
 

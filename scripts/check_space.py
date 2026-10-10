@@ -15,15 +15,17 @@ import space_lib as S                                                      # noq
 V1_FIELDS = {"get_example_values": "enable_format_assistance", "build_value_dictionary": "enable_entity_matching"}
 
 
-def check(space: dict, text: str, dev_catalog: str) -> tuple[list[str], list[str]]:
-    errors, warnings = [], []
+def check(space: dict, text: str, dev_catalog: str) -> tuple[list[str], list[str], list[str]]:
+    errors, warnings, notes = [], [], []
     if not isinstance(space.get("version"), int):
         errors.append("missing integer 'version'")
     if text != S.dumps(space):
         errors.append("the file is not formatted the way `bundle generate` writes it (2-space indent, sorted keys); "
                       "re-export it from dev instead of editing it by hand")
-    if S.normalise(space) != space:
-        errors.append("a list is not sorted by id / identifier (Genie rejects unsorted lists)")
+    order = S.order_differences(space)
+    if order:
+        notes.append(f"{len(order)} list(s) in Databricks' export order (fine; order is ignored when comparing "
+                     f"versions): {', '.join(order)}")
     if not S.get(space, ("data_sources", "tables")) and not S.get(space, ("data_sources", "metric_views")):
         errors.append("the space has no data sources")
     seen = {}
@@ -51,7 +53,7 @@ def check(space: dict, text: str, dev_catalog: str) -> tuple[list[str], list[str
     if not graded:
         warnings.append("no benchmark question has an expected SQL answer: the QA benchmark gate will fail. "
                         "Add benchmarks in the dev space (Benchmarks tab).")
-    return errors, warnings
+    return errors, warnings, notes
 
 
 def main() -> int:
@@ -61,7 +63,9 @@ def main() -> int:
         print(f"{S.SPACE_FILE.relative_to(S.ROOT)} does not exist yet: run the bootstrap workflow first.")
         return 1
     text = S.SPACE_FILE.read_text(encoding="utf-8")
-    errors, warnings = check(S.load(), text, dev_catalog)
+    errors, warnings, notes = check(S.load(), text, dev_catalog)
+    for n in notes:
+        print(f"note: {n}")
     for w in warnings:
         print(f"WARNING: {w}")
     for e in errors:

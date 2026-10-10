@@ -66,7 +66,8 @@ jobs:
           cp src/genie_space.geniespace.json "$RUNNER_TEMP/main.json"
           databricks bundle generate genie-space --resource genie_space --force -t dev
           python scripts/describe_changes.py "$RUNNER_TEMP/main.json" src/genie_space.geniespace.json > "$RUNNER_TEMP/changes.md"
-          if git diff --quiet -- src/; then
+          if git diff --quiet -- src/ || python scripts/describe_changes.py --same "$RUNNER_TEMP/main.json" src/genie_space.geniespace.json; then
+            git checkout -- src/                     # same content (at most a different list order): nothing to propose
             echo "The dev space matches main."
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
