@@ -98,7 +98,7 @@ jobs:
           python scripts/deploy_guard.py "$RUNNER_TEMP/plan.json" --on-ui-edits "$POLICY"
       - name: bundle deploy -t dev
         if: steps.guard.outputs.deploy == 'true'
-        run: databricks bundle deploy -t dev --auto-approve
+        run: bash scripts/deploy.sh dev
       - name: Smoke test
         run: |
           export GENIE_SPACE_ID=$(databricks bundle summary -t dev -o json | jq -r '.resources.genie_spaces.genie_space.id')
@@ -134,7 +134,7 @@ jobs:
           databricks bundle plan -t qa -o json > "$RUNNER_TEMP/plan.json"
           python scripts/deploy_guard.py "$RUNNER_TEMP/plan.json" --on-ui-edits overwrite
       - name: bundle deploy -t qa
-        run: databricks bundle deploy -t qa --auto-approve
+        run: bash scripts/deploy.sh qa
       - name: Benchmark gate
         run: |
           export GENIE_SPACE_ID=$(databricks bundle summary -t qa -o json | jq -r '.resources.genie_spaces.genie_space.id')
@@ -169,7 +169,7 @@ jobs:
           databricks bundle plan -t prod -o json > "$RUNNER_TEMP/plan.json"
           python scripts/deploy_guard.py "$RUNNER_TEMP/plan.json" --on-ui-edits "$POLICY"
       - name: bundle deploy -t prod
-        run: databricks bundle deploy -t prod --auto-approve
+        run: bash scripts/deploy.sh prod
       - name: Smoke test
         run: |
           export GENIE_SPACE_ID=$(databricks bundle summary -t prod -o json | jq -r '.resources.genie_spaces.genie_space.id')
