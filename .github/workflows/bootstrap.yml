@@ -27,18 +27,21 @@ jobs:
     runs-on: ubuntu-latest
     environment: dev
     env:
-      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
-      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST || secrets.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID || secrets.DATABRICKS_CLIENT_ID }}
       DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
       DATABRICKS_AUTH_TYPE: ${{ secrets.DATABRICKS_CLIENT_SECRET != '' && 'oauth-m2m' || 'github-oidc' }}
+      TARGET_ENV: dev
       SPACE_ID: ${{ inputs.space_id }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
           token: ${{ secrets.GENIE_BOT_TOKEN || github.token }}
+      - name: Check the Databricks settings
+        run: bash scripts/check_settings.sh
       - uses: databricks/setup-cli@v1.20.0
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: pip install --quiet pyyaml

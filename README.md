@@ -94,7 +94,7 @@ warehouse name, the group names.
 ### 3. GitHub settings
 | Setting | Value |
 |---|---|
-| **Environments** `dev`, `qa`, `prod` (Settings → Environments) | variables `DATABRICKS_HOST` (workspace URL) and `DATABRICKS_CLIENT_ID` (the service principal's application id) in each |
+| **Environments** `dev`, `qa`, `prod` (Settings → Environments; names exactly in lower case) | in **each**: `DATABRICKS_HOST` (workspace URL, e.g. `https://adb-123.azuredatabricks.net`) and `DATABRICKS_CLIENT_ID` (the service principal's application id). As *Environment variables* (or secrets: both work) |
 | `prod` environment protection | **required reviewers**; deployment branches and tags: `main` and `genie-prod-*` |
 | Optional secret `DATABRICKS_CLIENT_SECRET` per environment | only if you can't use workload identity federation yet: the workflows then use OAuth with this secret instead |
 | Optional variable `ACCURACY_THRESHOLD` (repository or environment) | the benchmark gate's threshold, default `0.80` |
@@ -108,6 +108,15 @@ warehouse name, the group names.
 this repository's title and permissions and creates QA. From here on, editors just edit dev.
 
 ---
+
+## Troubleshooting
+
+| Message in the workflow log | Cause | Fix |
+|---|---|---|
+| `Databricks settings missing for 'dev'` (or `github-oidc auth: missing Host`) | the GitHub environment has no `DATABRICKS_HOST` / `DATABRICKS_CLIENT_ID` | Settings → Environments → `dev` → add both; check the environment name is exactly `dev` |
+| `github-oidc auth: …` with the host set, or `invalid_client` / `401` | the service principal has no federation policy for this repository and environment, or a wrong client id | add a GitHub federation policy with subject `repo:<owner>/<repo>:environment:<env>` (or set the `DATABRICKS_CLIENT_SECRET` secret instead) |
+| `genie space with ID … not found` | wrong space id, or the service principal can't see the space | copy the id from the space's URL; give the dev service principal `CAN MANAGE` on it |
+| `Not bootstrapped yet` | expected before the first bootstrap | run **1 · Bootstrap** |
 
 ## What happens when…
 

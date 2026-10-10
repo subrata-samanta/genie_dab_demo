@@ -24,32 +24,35 @@ jobs:
     runs-on: ubuntu-latest
     environment: dev
     env:
-      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
-      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST || secrets.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID || secrets.DATABRICKS_CLIENT_ID }}
       DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
       DATABRICKS_AUTH_TYPE: ${{ secrets.DATABRICKS_CLIENT_SECRET != '' && 'oauth-m2m' || 'github-oidc' }}
+      TARGET_ENV: dev
       # A token of a GitHub App or bot account, so the pull request starts its checks. With the default
       # GITHUB_TOKEN, GitHub does not run workflows on pull requests that a workflow opened.
       GH_TOKEN: ${{ secrets.GENIE_BOT_TOKEN || github.token }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
           token: ${{ secrets.GENIE_BOT_TOKEN || github.token }}
-
-      - name: Is the repository set up?
+      - name: Is the space bootstrapped?
         id: ready
         run: |
-          if [ ! -f src/genie_space.geniespace.json ] || [ -z "$DATABRICKS_HOST" ]; then
-            echo "Not set up yet (run the bootstrap workflow, set the dev environment's variables): nothing to do."
+          if [ ! -f src/genie_space.geniespace.json ]; then
+            echo "Not bootstrapped yet (run the workflow '1 · Bootstrap'): nothing to sync."
             echo "ok=false" >> "$GITHUB_OUTPUT"
           else
             echo "ok=true" >> "$GITHUB_OUTPUT"
           fi
+      - name: Check the Databricks settings
+        if: steps.ready.outputs.ok == 'true'
+        run: bash scripts/check_settings.sh
 
       - uses: databricks/setup-cli@v1.20.0
         if: steps.ready.outputs.ok == 'true'
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         if: steps.ready.outputs.ok == 'true'
         with:
           python-version: "3.12"
