@@ -79,14 +79,59 @@ The pull request shows each change in words (➕ added, ➖ removed, ✏️ chan
    be deployed before its tables exist).
 2. A **SQL warehouse** with the name in `databricks.yml` (`lookup: warehouse:`).
 3. A **service principal** for GitHub Actions, with a **GitHub federation policy** (workload identity federation)
-   whose subject is `repo:subrata-samanta/genie_dab_demo:environment:<dev|qa|prod>`. Give it: workspace access,
-   Databricks SQL access, `CAN USE` on the warehouse, and `USE CATALOG` / `USE SCHEMA` / `SELECT` on that
-   environment's catalog (the smoke test and the benchmarks run queries as it).
+   whose subject is `repo:subrata-samanta/genie_dab_demo:environment:<dev|qa|prod>`. Give it workspace access,
+   Databricks SQL access, `CAN USE` on the warehouse, and on that environment's catalog:
+
+   ```sql
+   GRANT `USE CATALOG`, `USE SCHEMA`, SELECT, EXECUTE ON CATALOG <catalog> TO `<application-id>`;
+   ```
+
+   `EXECUTE` matters: it covers the space's SQL functions *and* the functions that row filters call.
    **In dev also `CAN MANAGE` on the existing dev space** (so it can adopt and update it).
-4. **Sharing**: the bundle does not manage who can use the spaces (no `permissions:` in
+4. **Row filters and column masks**: a row filter removes rows instead of denying access, so a principal that
+   is not in the group it admits gets a successful query, zero rows and no error anywhere. Check what is
+   filtered and which groups pass, then add the service principal to one:
+
+   ```sql
+   SELECT table_schema, table_name, filter_name FROM <catalog>.information_schema.row_filters;
+   SELECT routine_definition FROM <catalog>.information_schema.routines WHERE routine_name = 'rls_region';
+   ```
+
+   Here `rls_region` guards `gold.fct_sales_line` and `gold.fct_inventory_daily` and admits `fc_all_regions`
+   or `fc_region_<region>`; the service principal needs **`fc_all_regions`** (group membership is account-wide,
+   so it covers all three environments). A region-scoped group would make the benchmark gate fail: its expected
+   answers are whole-business figures.
+5. **Sharing**: the bundle does not manage who can use the spaces (no `permissions:` in
    `resources/genie_space.genie_space.yml` for now). The dev space keeps its sharing. QA and prod are created
    by the service principal, so share them once by hand (Share → *Can run* for users, who also need `SELECT`
    on the data). To manage access as code later, see the comment in that file.
+
+### 1b. Check the access as the service principal, before the first deployment
+Genie runs every question as the service principal, not as you, so checking as yourself proves nothing: a
+question that works in the Genie UI can return zero rows in CI. Generate a short-lived secret for it
+(Settings → Identity and access → Service principals → *Secrets*), then:
+
+```bash
+export DATABRICKS_HOST=https://<workspace>.cloud.databricks.com
+export DATABRICKS_CLIENT_ID=<application-id>
+export DATABRICKS_CLIENT_SECRET=<the secret>
+export DATABRICKS_AUTH_TYPE=oauth-m2m
+```
+
+| Query, run as the service principal | Expected | If not |
+|---|---|---|
+| `SHOW TABLES IN <catalog>.gold` | every fact and dimension listed | a missing table has no `SELECT`: step 1.3 |
+| `SELECT MEASURE(net_sales) FROM <catalog>.semantic.sales_metrics` | a number | `NULL` means a row filter excludes every row: step 1.4 |
+| `SELECT region, MEASURE(net_sales) FROM <catalog>.semantic.sales_metrics WHERE is_last_completed_fiscal_week GROUP BY ALL` | one row per region | as above |
+
+Then the real thing — the same questions CI asks:
+
+```bash
+export GENIE_SPACE_ID=$(databricks bundle summary -t dev -o json | jq -r '.resources.genie_spaces.genie_space.id')
+python tests/smoke_test.py
+```
+
+Delete the secret when you are done.
 
 ### 2. This repository
 Edit `databricks.yml`: `dev_catalog` and each target's `catalog`, and the warehouse name. The title and
@@ -118,6 +163,11 @@ this repository's title and creates QA. From here on, editors just edit dev.
 | `github-oidc auth: …` with the host set, or `invalid_client` / `401` | the service principal has no federation policy for this repository and environment, or a wrong client id | add a GitHub federation policy with subject `repo:<owner>/<repo>:environment:<env>` (or set the `DATABRICKS_CLIENT_SECRET` secret instead) |
 | `genie space with ID … not found` | wrong space id, or the service principal can't see the space | copy the id from the space's URL; give the dev service principal `CAN MANAGE` on it |
 | `Not bootstrapped yet` | expected before the first bootstrap | run **1 · Bootstrap** |
+| Smoke test: `(COMPLETED, 0 row(s))` while the same question works in the UI | a **row filter** excludes every row for the service principal — the query succeeds, so nothing reports an error | add it to the row filter's group (step 1.4). Confirm first: `MEASURE(...)` returns `NULL` for it and a number for you |
+| `403 PERMISSION_DENIED` … `Failed to fetch tables for the agent` on `bundle deploy` | no catalog grants for the service principal in *that* environment (grants are per catalog; dev working says nothing about qa) | the `GRANT` in step 1.3, against the target's catalog |
+| `net/url: invalid control character in URL` | a GitHub environment variable was saved with a trailing newline | re-enter `DATABRICKS_HOST` / `DATABRICKS_CLIENT_ID` for that environment. `scripts/check_settings.sh` now trims them and warns, but fix the value |
+| `UNRESOLVED_ALL_IN_GROUP_BY`, with a one-line query in the message | usually a symptom, not the cause: Genie wrote ad-hoc SQL instead of reusing a trusted example | check the row filter and grants first; it clears up once the data is visible |
+| The `prod` job says *skipped* | working as designed: prod only runs from **Run workflow** with target `prod`, never from a push to main | Actions → **3 · Release** → Run workflow → *Deploy up to* `prod` |
 
 ## What happens when…
 
