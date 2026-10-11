@@ -24,7 +24,7 @@ changes in plain words. A reviewer merges it, and the pipeline does the rest.
                                  │                     └► QA    deploy + benchmark gate ►  QA space
                                3 · Release (Run workflow, target prod)
                                  └─► QA gate again ─► ⏸ approval ─► prod deploy + smoke test ─► prod space
-                                                                    └─► tag genie-prod-<time>
+                                                                    └─► tag genie-prod-v<n>
 ```
 
 | Workflow | When | What it does |
@@ -64,11 +64,46 @@ The pull request shows each change in words (➕ added, ➖ removed, ✏️ chan
 ## For the release manager
 
 - **Promote to prod**: **Actions → 3 · Release → Run workflow**, branch `main`, target `prod`. The run re-tests QA,
-  waits for your approval, deploys prod, smoke-tests it and tags the commit `genie-prod-<time>`.
-- **Roll back**: the same, but *Use workflow from* an earlier `genie-prod-*` **tag**. Prod gets that version
-  (same space, same URL).
+  waits for your approval, deploys prod and smoke-tests it.
 - If someone edited prod in the UI, the release **stops** and shows what the deploy would change. Re-make the
   change in dev, or rerun with **overwrite prod edits**.
+
+### Versions
+
+Every deployment tags the commit, so each environment's history is a list you can pick from:
+
+```
+genie-dev-v9     genie-qa-v9     genie-prod-v7      <- dev and QA hold v9, prod still serves v7
+```
+
+One number per version of the space, reused as that version promotes, so `v9` is the same content
+everywhere. `genie-<env>-current` moves with each deploy and says what that environment runs right now;
+the numbered tags never move and are the rollback points. Each run's summary prints the ladder.
+
+The tag is written **straight after the deploy**, before the smoke test and the benchmark gate — it says
+what the environment *is running*, not what passed. QA is deployed before its gate runs, so a failed gate
+still leaves that version in QA and the tag has to say so. Quality is the run's status, and prod can only
+ever receive a version that passed, because the prod job requires the QA gate to have succeeded.
+
+### Going back to an earlier version
+
+Three different actions, not one. All three are **Actions → 3 · Release → Run workflow** with
+*Use workflow from* set to the tag you want.
+
+| What you want | Target | Also |
+|---|---|---|
+| **Roll back prod** — restore service to a known-good version | `prod` | pick a `genie-prod-v*` tag: it passed the gate by definition. Needs the usual approval |
+| **Reset dev to a known version** — undo an editor's mess | `dev` | pick a `genie-dev-v*` tag **and tick *discard dev edits***, or the guard keeps the newer live edits and will not deploy |
+| Re-deploy QA | `qa` | not a rollback — see below |
+
+**QA has no rollback of its own, on purpose.** It is overwritten by every release, and by every prod
+action: promoting or rolling back prod deploys that version to QA on the way through. So QA follows
+whatever you do elsewhere.
+
+**A dev reset destroys work in progress.** *Discard dev edits* throws away whatever the editors have
+changed in the Genie UI since the last sync — tell them first. The run prints exactly what it discarded,
+so there is a record. Afterwards the next sync notices dev no longer matches `main` and opens a pull
+request to bring `main` back in line: merge it if the reset is permanent, close it if it was temporary.
 
 ---
 
@@ -216,7 +251,8 @@ Edit **`config/project.yml`** — the only file with anything space-specific in 
 | Setting | Value |
 |---|---|
 | **Environments** `dev`, `qa`, `prod` (Settings → Environments; names exactly in lower case) | in **each**: `DATABRICKS_HOST` (workspace URL, e.g. `https://adb-123.azuredatabricks.net`) and `DATABRICKS_CLIENT_ID` (the service principal's application id). As *Environment variables* (or secrets: both work) |
-| `prod` environment protection | **required reviewers**; deployment branches and tags: `main` and `genie-prod-*` |
+| `prod` environment protection | **required reviewers**; deployment branches and tags: `main` and `genie-prod-v*` |
+| `dev` / `qa` environment protection | if you restrict deployment branches, **allow the tags too** (`genie-dev-v*`, `genie-qa-v*`), or resetting dev to an earlier version is blocked before it starts |
 | Optional secret `DATABRICKS_CLIENT_SECRET` per environment | only if you can't use workload identity federation yet: the workflows then use OAuth with this secret instead |
 | Optional variable `ACCURACY_THRESHOLD` (repository or environment) | the benchmark gate's threshold, default `0.80` |
 | Actions → General → *Allow GitHub Actions to create and approve pull requests* | on |
@@ -258,7 +294,7 @@ this repository's title and creates QA. From here on, editors just edit dev.
 | Someone edits QA in the UI | the next release overwrites it (and says so) |
 | Someone edits prod in the UI | the prod release stops; rerun with *overwrite prod edits* after deciding |
 | A release would delete or recreate a space | it stops: the space's URL and conversations would be lost |
-| A bad version reached prod | run **3 · Release** from the previous `genie-prod-*` tag |
+| A bad version reached prod | run **3 · Release** from the previous `genie-prod-v*` tag — see [Going back to an earlier version](#going-back-to-an-earlier-version) |
 
 ## Files
 ```
@@ -271,6 +307,7 @@ scripts/check_access.py                 can the deploying identity read the spac
 scripts/describe_changes.py             the plain-words change list in pull requests
 scripts/deploy_guard.py                 reads `bundle plan`: keep / overwrite / refuse UI edits; refuses to duplicate a space
 scripts/set_catalog.sh                  points the JSON at the qa / prod catalog (bundles don't resolve variables in it)
+scripts/tag_release.sh                  tags what each environment now runs (genie-<env>-v<n>)
 scripts/open_pr.sh                      commits an export and opens or updates its pull request
 tests/smoke_test.py                     can the deployed space answer (SQL + rows)?
 tests/benchmark_gate.py                 Genie benchmark evaluation with a threshold

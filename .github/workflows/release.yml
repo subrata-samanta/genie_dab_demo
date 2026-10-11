@@ -6,7 +6,7 @@
 #   Run workflow, target prod               check -> QA (+ benchmark gate) -> approval -> prod (+ smoke test, tag)
 #
 # Prod therefore always gets a version that passed the QA gate in the same run, and every prod deployment is
-# tagged genie-prod-<time>. Rollback: Run workflow from an earlier genie-prod-* tag ("Use workflow from"), target prod.
+# tagged genie-<env>-v<n>. Rollback: Run workflow from an earlier tag ("Use workflow from"), target that environment.
 name: "3 · Release: dev → QA → prod"
 
 on:
@@ -37,7 +37,7 @@ on:
         default: false
 
 permissions:
-  contents: write          # the genie-prod-* tag
+  contents: write          # the genie-<env>-v<n> tags
   id-token: write          # passwordless login to Databricks (workload identity federation)
 
 concurrency:
@@ -101,6 +101,9 @@ jobs:
       - name: bundle deploy -t dev
         if: steps.guard.outputs.deploy == 'true'
         run: bash scripts/deploy.sh dev
+      - name: Record what dev now runs
+        if: steps.guard.outputs.deploy == 'true'
+        run: bash scripts/tag_release.sh dev
       - name: Smoke test
         run: |
           export GENIE_SPACE_ID=$(databricks bundle summary -t dev -o json | jq -r '.resources.genie_spaces.genie_space.id')
@@ -139,6 +142,8 @@ jobs:
           python scripts/deploy_guard.py "$RUNNER_TEMP/plan.json" --on-ui-edits overwrite
       - name: bundle deploy -t qa
         run: bash scripts/deploy.sh qa
+      - name: Record what QA now runs
+        run: bash scripts/tag_release.sh qa
       - name: Benchmark gate
         run: |
           export GENIE_SPACE_ID=$(databricks bundle summary -t qa -o json | jq -r '.resources.genie_spaces.genie_space.id')
@@ -176,13 +181,9 @@ jobs:
           python scripts/deploy_guard.py "$RUNNER_TEMP/plan.json" --on-ui-edits "$POLICY"
       - name: bundle deploy -t prod
         run: bash scripts/deploy.sh prod
+      - name: Record what prod now runs
+        run: bash scripts/tag_release.sh prod
       - name: Smoke test
         run: |
           export GENIE_SPACE_ID=$(databricks bundle summary -t prod -o json | jq -r '.resources.genie_spaces.genie_space.id')
           python tests/smoke_test.py
-      - name: Tag the release
-        run: |
-          tag="genie-prod-$(date -u '+%Y%m%d-%H%M%S')"
-          git tag "$tag"
-          git push -q origin "$tag"
-          echo "Prod runs $(git rev-parse --short HEAD), tagged $tag" | tee -a "$GITHUB_STEP_SUMMARY"
