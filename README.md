@@ -133,14 +133,18 @@ can be copied forward without re-doing any configuration.
 
 3. **Set up Databricks and GitHub** for the new space: [One-time setup](#one-time-setup-admin) below — a
    service principal, its grants, its row-filter group, and the three GitHub environments.
-4. **Check it parses** before pushing anything:
+4. **Bootstrap**: Actions → **1 · Bootstrap** with the id of the dev space to adopt, then merge the pull
+   request it opens. This is what writes `src/genie_space.geniespace.json`.
+5. **Check it parses**, now that the space file exists:
 
    ```bash
    databricks bundle validate -t dev     # then -t qa and -t prod
    ```
 
-5. **Bootstrap**: Actions → **1 · Bootstrap** with the id of the dev space to adopt, then merge the pull
-   request it opens.
+   > Run this **after** bootstrap, not before. The resource points at
+   > `src/genie_space.geniespace.json`, which only bootstrap creates, so on a fresh clone `bundle
+   > validate` fails with *failed to read serialized genie space from file_path*. That is expected
+   > before step 4 and means nothing is wrong.
 
 ### What you do not need to change
 

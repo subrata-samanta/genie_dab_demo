@@ -57,6 +57,11 @@ def main(argv=None) -> int:
     ap.add_argument("--warehouse-id", help="defaults to the warehouse named in config/project.yml")
     args = ap.parse_args(argv)
 
+    if not S.SPACE_FILE.exists():
+        print(f"{S.SPACE_FILE.relative_to(S.ROOT)} does not exist yet: run the bootstrap workflow first. "
+              f"There are no data sources to check until the space is under version control.")
+        return 1
+
     w = WorkspaceClient()
     errors, warnings = [], []
 
