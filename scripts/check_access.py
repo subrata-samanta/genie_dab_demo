@@ -16,6 +16,7 @@ Auth: the standard DATABRICKS_* environment variables or CLI profile. Requires: 
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -30,6 +31,17 @@ ROW_FILTER_HINT = (
     "<catalog>.information_schema.row_filters, read the filter's function, and add this identity to a "
     "group the function admits."
 )
+
+
+APPLICATION_ID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
+
+
+def is_service_principal(me) -> bool:
+    """A service principal authenticates as its application id, a person as an email address.
+
+    Not `me.emails`: a service principal has one too, holding that same application id.
+    """
+    return bool(APPLICATION_ID.match((me.user_name or "").strip()))
 
 
 def data_sources(space: dict) -> list[str]:
@@ -49,9 +61,9 @@ def main(argv=None) -> int:
     errors, warnings = [], []
 
     me = w.current_user.me()
-    is_sp = not (me.emails or me.user_name and "@" in (me.user_name or ""))
-    print(f"identity: {me.display_name or me.user_name} ({me.user_name})")
-    if args.target in ("qa", "prod") and not is_sp:
+    kind = "service principal" if is_service_principal(me) else "user"
+    print(f"identity: {me.display_name or me.user_name} ({me.user_name}) - {kind}")
+    if args.target in ("qa", "prod") and not is_service_principal(me):
         warnings.append(f"deploying {args.target} as a person, not a service principal. Databricks recommends "
                         f"a service principal per environment, so a deployment does not depend on anyone's "
                         f"personal access.")
