@@ -15,6 +15,7 @@ long version: how it works and why.
 | **[new-space-checklist.md](new-space-checklist.md)** | Using this repository for another Genie space: the one file to edit, field by field, and everything to set up outside the repository |
 | **[configuration.md](configuration.md)** | Every setting and which file it lives in. What to change when you clone this for another space |
 | **[access-and-identity.md](access-and-identity.md)** | The permission model, the four gates, and how to verify them before deploying |
+| **[move-to-separate-workspaces.md](move-to-separate-workspaces.md)** | Migration runbook: moving QA and prod out of a shared workspace into their own |
 | **[operations.md](operations.md)** | Promoting, rolling back, resetting dev, versions, troubleshooting |
 
 ## If you are…
@@ -29,6 +30,10 @@ this pipeline has actually produced.
 
 **Setting up a new space** — [new-space-checklist.md](new-space-checklist.md). It is the only document
 you need: one file to edit, then the Databricks and GitHub setup, which is the part that takes the time.
+
+**Splitting environments into their own workspaces** —
+[move-to-separate-workspaces.md](move-to-separate-workspaces.md). Read its first section before
+scheduling anything: the spaces are recreated, so conversation history does not survive.
 
 **Changing a script** — [workflows-and-scripts.md](workflows-and-scripts.md). Each entry says why the
 script exists, which matters more than what it does: most of them are guards against a specific failure,

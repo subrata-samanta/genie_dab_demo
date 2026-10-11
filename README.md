@@ -186,6 +186,9 @@ authenticate — still better than deploying somewhere unintended.
 With a workspace per environment the catalog may keep the **same name** in each, since the workspace
 already separates them — `set_catalog.sh` then does nothing, and `title_suffix` is optional.
 
+Already running all three in one workspace? **[docs/move-to-separate-workspaces.md](docs/move-to-separate-workspaces.md)**
+is the migration runbook.
+
 Sharing one workspace across all three also works: repeat the same host, give the catalogs different
 names, and keep the `[DEV]` / `[QA]` suffixes so the spaces are distinguishable in one list. It is the
 weaker isolation — one compromised principal reaches every environment's data — so prefer separate
