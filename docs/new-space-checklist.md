@@ -189,6 +189,30 @@ This is the part that takes the time. Full detail in
 
 ---
 
+## 4a. Make sure the space has something to test with
+
+**Nothing in this repository defines the test questions.** Both tests read the space itself, so a sparse
+space produces a pipeline that passes without proving anything.
+
+| Test | Where its questions come from |
+|---|---|
+| **Smoke test** | the space's **trusted example SQL** (first 3, skipping any with parameters); failing that, benchmark questions that have a SQL answer. Override with the `SMOKE_QUESTIONS` environment variable |
+| **Benchmark gate** | the space's own **Benchmarks** tab, run by Databricks. Not read from this repository at all |
+
+So before bootstrapping, the dev space should already have:
+
+- [ ] **trusted example SQL** for the questions users really ask — these are both the smoke test's
+      questions and, per Databricks, the strongest lever on answer quality
+- [ ] **10–15 benchmark questions with a SQL answer**. Databricks suggests that many, and 80% accuracy
+      before user acceptance testing — which is what `ACCURACY_THRESHOLD` defaults to
+
+Without benchmarks the QA gate fails with *no benchmark could be graded automatically*, and the format
+check warns about it. Without either, the smoke test fails with *there is nothing to ask* rather than
+passing on an empty list.
+
+Both are authored by the editors in the Genie UI. Bootstrap exports them; the hourly sync keeps them
+current. Nothing to configure here.
+
 ## 5. Bootstrap, then validate — in that order
 
 **Actions → 1 · Bootstrap**, with the id of the dev space to adopt (the last part of its URL,
@@ -246,4 +270,6 @@ Delete the secret when you are done.
 | `403 PERMISSION_DENIED … Failed to fetch tables for the agent` | no catalog grants for the principal in that environment |
 | `net/url: invalid control character in URL` | a GitHub variable was saved with a trailing newline |
 | Smoke test `COMPLETED, 0 row(s)` | a row filter excludes every row for the service principal |
+| `SMOKE TEST FAILED: there is nothing to ask` | the space has no trusted example SQL and no benchmark with a SQL answer — add them in the Genie UI |
+| `GATE FAILED: no benchmark could be graded automatically` | same cause: the space has no benchmark questions with an expected SQL answer |
 | A group in `space_permissions` does not exist | create it, or remove it from the list |

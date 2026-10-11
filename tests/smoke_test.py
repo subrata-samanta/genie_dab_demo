@@ -75,8 +75,15 @@ def main() -> int:
     if not space_id:
         sys.exit("GENIE_SPACE_ID is not set (see the top of this file).")
     w = WorkspaceClient()
+    asked = questions()
+    if not asked:
+        print("SMOKE TEST FAILED: there is nothing to ask.\n"
+              "The space has no trusted example SQL and no benchmark question with a SQL answer, so this "
+              "test cannot tell whether it works. Add trusted example SQL and benchmarks in the dev space "
+              "(they are also what the QA gate grades), or set SMOKE_QUESTIONS to ask something specific.")
+        return 1
     failures = []
-    for question in questions():
+    for question in asked:
         message, status = ask(w, space_id, question)
         rows = row_count(w, message) if status == "COMPLETED" else 0
         print(f"[{'PASS' if rows else 'FAIL'}] {question}  ({status}, {rows} row(s))")

@@ -256,6 +256,10 @@ It deliberately does not check that the numbers are right — that is the gate's
 that deploys but cannot work: missing tables, missing grants, a broken instruction, a row filter that
 hides everything.
 
+If the space has neither example SQL nor benchmarks, there is nothing to ask and the test **fails** with
+*there is nothing to ask*, rather than passing on an empty list. A test that asserts nothing must not
+report success.
+
 ```
 export GENIE_SPACE_ID=$(databricks bundle summary -t dev -o json | jq -r '.resources.genie_spaces.genie_space.id')
 python tests/smoke_test.py
