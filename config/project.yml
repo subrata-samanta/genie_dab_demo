@@ -31,14 +31,8 @@ variables:
     default: "Ask about sales, margin, baskets, promotions and stock across FreshCart stores and online."
 
   # ===========================================================================
-  # FILL IN - where it runs and what it reads
+  # FILL IN - the data
   # ===========================================================================
-  warehouse_name:
-    description: >-
-      SQL warehouse, looked up by this name in each environment's workspace. Use a serverless warehouse:
-      Databricks recommends never Classic or Pro for Genie. If one environment names its warehouse
-      differently, override warehouse_name for that target below.
-    default: "Serverless Starter Warehouse"
   dev_catalog:
     description: >-
       Catalog the dev space reads. Must match the catalog inside src/*.geniespace.json, which is exported
@@ -63,8 +57,17 @@ variables:
     default: freshcart-business-users
 
   # ===========================================================================
-  # Derived - leave these alone
+  # Declared here, given their value per target below.
+  # A bundle variable has to be declared before a target can assign it - without these four entries
+  # you get "variable <name> is not defined but is assigned a value".
   # ===========================================================================
+  warehouse_id:
+    description: >-
+      SQL warehouse the space runs on. No default on purpose: warehouse ids are workspace-scoped, so
+      every environment has its own even when the warehouses are named the same, and inheriting one
+      would silently point an environment at another workspace's warehouse. Find each id in the
+      warehouse's URL (/sql/warehouses/<id>) or with `databricks warehouses list` against that
+      workspace. Use a serverless warehouse: Databricks recommends never Classic or Pro for Genie.
   catalog:
     description: "This environment's catalog. Defaults to dev_catalog; override per target when it differs."
     default: ${var.dev_catalog}
@@ -79,10 +82,9 @@ variables:
   title_suffix:
     description: "Appended to space_title so environments cannot be confused."
     default: ""
-  warehouse_id:
-    description: "Resolved from warehouse_name in each workspace."
-    lookup:
-      warehouse: ${var.warehouse_name}
+  # ===========================================================================
+  # Rarely changed
+  # ===========================================================================
   deployment_root:
     description: >-
       Parent folder for the bundle's record of the space. Deliberately not under
@@ -113,6 +115,7 @@ targets:
     workspace:
       host: https://dbc-dce5877f-fc61.cloud.databricks.com
     variables:
+      warehouse_id: "be6f5ff41b27cf5d"
       title_suffix: " [DEV]"
       # Only dev is editable: that is where the editors work, and the sync exports what they change.
       space_permissions:
@@ -127,6 +130,7 @@ targets:
     workspace:
       host: https://dbc-dce5877f-fc61.cloud.databricks.com
     variables:
+      warehouse_id: "be6f5ff41b27cf5d"
       catalog: freshcart_qa
       title_suffix: " [QA]"
 
@@ -134,4 +138,5 @@ targets:
     workspace:
       host: https://dbc-dce5877f-fc61.cloud.databricks.com
     variables:
+      warehouse_id: "be6f5ff41b27cf5d"
       catalog: freshcart

@@ -127,7 +127,7 @@ can be copied forward without re-doing any configuration.
   | `bundle.name` | a short unique name, e.g. `genie-finance-assistant`. Databricks records the adopted space under it, so **pick it once**: changing it later makes the bundle forget the space and try to create a new one |
   | `space_title` | the title shown in the Genie list (the `[DEV]` / `[QA]` suffix is added for you) |
   | `space_description` | one line, shown under the title |
-  | `warehouse_name` | a SQL warehouse with this name must exist in **every** workspace |
+  | `targets.<env>.warehouse_id` | the warehouse id **per environment** — ids are workspace-scoped, so each one differs |
   | `dev_catalog` | the catalog the dev space actually reads — must match what is inside the exported JSON |
   | `targets.*.catalog` | the catalog for dev, qa and prod |
   | `space_permissions` | the groups that can run, edit and manage the space. They must already exist in the workspace, and deploying sets **exactly** this list |
@@ -194,7 +194,8 @@ workspaces where your organisation has them.
 ### 1. Databricks, per environment (dev, qa, prod)
 1. **The data** the space reads exists in each environment's catalog (deploy it before the space: a space can't
    be deployed before its tables exist).
-2. A **SQL warehouse** with the name in `config/project.yml` (`warehouse_name`).
+2. A **SQL warehouse**, with its id set for that environment in `config/project.yml`
+   (`targets.<env>.variables.warehouse_id`). Ids are workspace-scoped, so each environment has its own.
 3. A **service principal** for GitHub Actions, with a **GitHub federation policy** (workload identity federation)
    whose subject is `repo:<owner>/<repo>:environment:<dev|qa|prod>`. Give it workspace access,
    Databricks SQL access, `CAN USE` on the warehouse, and on that environment's catalog:

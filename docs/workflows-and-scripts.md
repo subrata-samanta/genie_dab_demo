@@ -117,7 +117,9 @@ Checks that the identity the job runs as can actually use the space's data, befo
 - Prints the identity and whether it is a **service principal** or a **user** — a service principal
   authenticates as its application id (a UUID), a person as an email address. Warns if qa or prod is
   being deployed by a person.
-- Resolves the warehouse named in `config/project.yml`.
+- Checks the warehouse id set for that target (`targets.<env>.variables.warehouse_id`) exists in this
+  workspace and is usable by this identity. Ids are workspace-scoped, so this catches one copied from
+  the wrong environment.
 - Reads every data source listed in the space JSON. A failure is an **error** (missing `SELECT`,
   `USE CATALOG`). A table that is readable but returns **no rows** is a **warning**: that is what a row
   filter looks like, and it is the one failure mode that otherwise produces a working pipeline and an

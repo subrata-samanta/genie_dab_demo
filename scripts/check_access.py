@@ -73,17 +73,17 @@ def main(argv=None) -> int:
                         f"a service principal per environment, so a deployment does not depend on anyone's "
                         f"personal access.")
 
-    warehouse_id = args.warehouse_id
-    if not warehouse_id:
-        name = S.setting("variables", "warehouse_name", "default")
-        match = [x for x in w.warehouses.list() if x.name == name]
-        if not match:
-            print(f"ERROR: no SQL warehouse named {name!r} is visible to this identity "
-                  f"(config/project.yml: warehouse_name). It must exist in every workspace, and the "
-                  f"identity needs CAN USE on it.")
-            return 1
-        warehouse_id = match[0].id
-        print(f"warehouse: {name} ({warehouse_id})")
+    warehouse_id = args.warehouse_id or S.setting("targets", args.target, "variables", "warehouse_id")
+    try:
+        warehouse = w.warehouses.get(warehouse_id)
+        print(f"warehouse: {warehouse.name} ({warehouse_id})")
+    except Exception as exc:                                               # noqa: BLE001
+        print(f"ERROR: cannot use the SQL warehouse {warehouse_id!r} "
+              f"(config/project.yml: targets.{args.target}.variables.warehouse_id): "
+              f"{type(exc).__name__}: {exc}\n"
+              f"Warehouse ids are workspace-scoped, so check this id belongs to the {args.target} "
+              f"workspace, and that this identity has CAN USE on it.")
+        return 1
 
     for identifier in data_sources(S.load()):
         try:

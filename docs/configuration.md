@@ -38,7 +38,7 @@ try to create a second one. (It will not succeed — `deploy_guard.py` refuses �
 
 | Variable | |
 |---|---|
-| `warehouse_name` | a SQL warehouse with this **name** must exist in every workspace; it is looked up per environment. Use a **serverless** warehouse — Databricks recommends never Classic or Pro for Genie |
+| `targets.<env>.warehouse_id` | the SQL warehouse that environment's space runs on, as an id — **set one per target**. Warehouse ids are workspace-scoped, so each environment has its own even when the warehouses are named the same. Quote it, or an all-digit id is read as a number. Use a **serverless** warehouse — Databricks recommends never Classic or Pro for Genie |
 
 ### The workspace per environment
 

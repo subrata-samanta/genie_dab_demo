@@ -54,18 +54,29 @@ A short unique name. It names the deployment folder and the record Databricks ke
 `space_title` is the name **without** the environment suffix — `[DEV]` and `[QA]` are appended
 automatically, and prod gets none.
 
-### The warehouse
+### The warehouse, one per environment
 
 ```yaml
-  warehouse_name:
-    default: "<SQL warehouse name>"       # e.g. Serverless Starter Warehouse
+targets:
+  dev:
+    variables:
+      warehouse_id: "<dev warehouse id>"
+  qa:
+    variables:
+      warehouse_id: "<qa warehouse id>"
+  prod:
+    variables:
+      warehouse_id: "<prod warehouse id>"
 ```
 
-A warehouse with this **name** must exist in every workspace you deploy to; it is looked up per
-environment, so the id can differ. Use a **serverless** warehouse — Databricks recommends never Classic
-or Pro for Genie.
+Warehouse ids are **workspace-scoped**, so every environment has its own — the same warehouse name in
+two workspaces is still two different ids. Find each in the warehouse's URL (`/sql/warehouses/<id>`) or
+with `databricks warehouses list` against that workspace.
 
-Leave it as is if every environment already has a warehouse by that name.
+Keep the quotes: an id that happens to be all digits would otherwise be read as a number. Use a
+**serverless** warehouse — Databricks recommends never Classic or Pro for Genie.
+
+A wrong id fails at `check_access.py` before any deploy, naming the exact setting.
 
 ### The workspace per environment
 
@@ -153,7 +164,6 @@ Levels: `CAN_READ`, `CAN_RUN`, `CAN_EDIT`, `CAN_MANAGE`.
   deployment_root:
     default: /Workspace/Applications   # change only if your workspace has a convention
   title_suffix:                        # set per target, never by hand
-  warehouse_id:                        # resolved from warehouse_name
 ```
 
 If you do change `deployment_root`, restrict write access on it to the deploying service principal, and
@@ -187,7 +197,7 @@ This is the part that takes the time. Full detail in
 **Databricks, per environment:**
 
 - [ ] the data exists in that environment's catalog (a space cannot deploy before its tables exist)
-- [ ] a SQL warehouse named in `warehouse_name`
+- [ ] a SQL warehouse, and its **id** from that workspace in `targets.<env>.variables.warehouse_id`
 - [ ] a service principal, with `CAN USE` on the warehouse and these grants on the catalog:
 
   ```sql

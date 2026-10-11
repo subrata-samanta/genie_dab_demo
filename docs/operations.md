@@ -65,8 +65,8 @@ If a reviewer does not want a change that is already in dev, there are two ways 
 One repository per space. See [configuration.md](configuration.md).
 
 1. Copy this repository. Do **not** copy `src/*.geniespace.json` — bootstrap writes it.
-2. Edit `config/project.yml`: `bundle.name`, title, description, `warehouse_name`, `dev_catalog`, the
-   per-target catalogs, and the `space_permissions` groups.
+2. Edit `config/project.yml`: `bundle.name`, title, description, `dev_catalog`, the group names, and
+   per target the workspace `host` and `warehouse_id`.
 3. Set up Databricks and GitHub for it — see [access-and-identity.md](access-and-identity.md).
 4. `databricks bundle validate -t dev`, then `-t qa` and `-t prod`.
 5. **Actions → 1 · Bootstrap** with the id of the dev space to adopt, then merge the pull request.
