@@ -72,14 +72,58 @@ The pull request shows each change in words (➕ added, ➖ removed, ✏️ chan
 
 ---
 
+## Use this repository for another Genie space
+
+This repository is a template: **one repository per Genie space**. Everything specific to a space lives in
+`config/project.yml`; the workflows, scripts and tests are identical in every copy, so improvements made here
+can be copied forward without re-doing any configuration.
+
+1. **Copy the repository** (GitHub → *Use this template*, or clone and push to a new remote). Do not copy
+   `src/*.geniespace.json` — bootstrap writes it for the new space.
+2. **Edit `config/project.yml`** — all of it, and nothing else:
+
+   | Setting | What to put |
+   |---|---|
+   | `bundle.name` | a short unique name, e.g. `genie-finance-assistant`. Databricks records the adopted space under it, so **pick it once**: changing it later makes the bundle forget the space and try to create a new one |
+   | `space_title` | the title shown in the Genie list (the `[DEV]` / `[QA]` suffix is added for you) |
+   | `space_description` | one line, shown under the title |
+   | `warehouse_name` | a SQL warehouse with this name must exist in **every** workspace |
+   | `dev_catalog` | the catalog the dev space actually reads — must match what is inside the exported JSON |
+   | `targets.*.catalog` | the catalog for dev, qa and prod |
+
+3. **Set up Databricks and GitHub** for the new space: [One-time setup](#one-time-setup-admin) below — a
+   service principal, its grants, its row-filter group, and the three GitHub environments.
+4. **Check it parses** before pushing anything:
+
+   ```bash
+   databricks bundle validate -t dev     # then -t qa and -t prod
+   ```
+
+5. **Bootstrap**: Actions → **1 · Bootstrap** with the id of the dev space to adopt, then merge the pull
+   request it opens.
+
+### What you do not need to change
+
+The environments are fixed at **dev → qa → prod**: the names appear in the workflow jobs and must match the
+GitHub environment names. The resource key `genie_space` and the file name `src/genie_space.geniespace.json`
+are conventions the scripts and `bundle generate --key genie_space` share — renaming either breaks the
+bootstrap, the deploy guard and the tests.
+
+### If the first bootstrap fails the format check
+
+`data sources must use the dev catalog …` means `dev_catalog` in `config/project.yml` does not match the
+catalog the new space reads. Set it to the catalog named in the error and re-run.
+
+---
+
 ## One-time setup (admin)
 
 ### 1. Databricks, per environment (dev, qa, prod)
 1. **The data** the space reads exists in each environment's catalog (deploy it before the space: a space can't
    be deployed before its tables exist).
-2. A **SQL warehouse** with the name in `databricks.yml` (`lookup: warehouse:`).
+2. A **SQL warehouse** with the name in `config/project.yml` (`warehouse_name`).
 3. A **service principal** for GitHub Actions, with a **GitHub federation policy** (workload identity federation)
-   whose subject is `repo:subrata-samanta/genie_dab_demo:environment:<dev|qa|prod>`. Give it workspace access,
+   whose subject is `repo:<owner>/<repo>:environment:<dev|qa|prod>`. Give it workspace access,
    Databricks SQL access, `CAN USE` on the warehouse, and on that environment's catalog:
 
    ```sql
@@ -134,8 +178,8 @@ python tests/smoke_test.py
 Delete the secret when you are done.
 
 ### 2. This repository
-Edit `databricks.yml`: `dev_catalog` and each target's `catalog`, and the warehouse name. The title and
-description are in `resources/genie_space.genie_space.yml`.
+Edit **`config/project.yml`** — the only file with anything space-specific in it. See
+[Use this repository for another Genie space](#use-this-repository-for-another-genie-space) for the full list.
 
 ### 3. GitHub settings
 | Setting | Value |
@@ -185,8 +229,9 @@ this repository's title and creates QA. From here on, editors just edit dev.
 
 ## Files
 ```
-databricks.yml                          bundle, variables, targets dev / qa / prod
-resources/genie_space.genie_space.yml   the Genie space resource: title, warehouse, file_path
+config/project.yml                      EDIT PER SPACE: name, title, warehouse, catalogs
+databricks.yml                          the promotion path dev / qa / prod (same for every space)
+resources/genie_space.genie_space.yml   the Genie space resource, built from config/project.yml
 src/genie_space.geniespace.json         the space's content (written by the workflows; created by bootstrap)
 scripts/check_space.py                  format checks of the JSON
 scripts/describe_changes.py             the plain-words change list in pull requests

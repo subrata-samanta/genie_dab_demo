@@ -5,8 +5,35 @@ import json
 import re
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parent.parent
 SPACE_FILE = ROOT / "src" / "genie_space.geniespace.json"
+CONFIG_DIR = ROOT / "config"
+
+
+def config() -> dict:
+    """This space's configuration: config/*.yml merged, the files the bundle also includes."""
+    merged: dict = {}
+    for path in sorted(CONFIG_DIR.glob("*.yml")):
+        for key, value in (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).items():
+            if isinstance(value, dict) and isinstance(merged.get(key), dict):
+                merged[key].update(value)
+            else:
+                merged[key] = value
+    if not merged:
+        raise SystemExit(f"no configuration found in {CONFIG_DIR.relative_to(ROOT)}/ (expected project.yml)")
+    return merged
+
+
+def setting(*path: str):
+    """One value from the configuration, e.g. setting('variables', 'dev_catalog', 'default')."""
+    node = config()
+    for key in path:
+        if not isinstance(node, dict) or key not in node:
+            raise SystemExit(f"config/project.yml: {'.'.join(path)} is not set")
+        node = node[key]
+    return node
 
 # id-bearing lists, with the words a reader understands
 SECTIONS = {

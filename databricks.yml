@@ -1,64 +1,42 @@
 # =============================================================================
-# Genie space as code (simple version): one JSON file, one resource, promoted dev -> qa -> prod
-# by GitHub Actions with `databricks bundle deploy`.
+# Genie space as code: one JSON file, one resource, promoted dev -> qa -> prod by GitHub Actions
+# with `databricks bundle deploy`.
 #
-#   resources/genie_space.genie_space.yml   the space: title, warehouse, file_path
-#   src/genie_space.geniespace.json         the space's content, exported from the dev space
+# THIS FILE IS THE SAME FOR EVERY SPACE - there is nothing to edit here.
+# Everything specific to a space lives in config/project.yml.
+#
+#   config/project.yml                   name, title, warehouse, catalogs   <- edit this
+#   resources/genie_space.genie_space.yml the resource, built from those variables
+#   src/genie_space.geniespace.json       the space's content, exported from the dev space
 #
 # Genie spaces need the direct deploy engine (the Terraform engine is NOT supported).
 # Authentication is not configured here: GitHub Actions provides DATABRICKS_HOST / DATABRICKS_CLIENT_ID /
 # DATABRICKS_CLIENT_SECRET per GitHub environment (see README.md).
-#
-# Keep `bundle.name` as it is: the adopted dev space is recorded under it.
 # =============================================================================
 
 bundle:
-  name: genie-dab-demo
   engine: direct
   databricks_cli_version: ">= 1.14.0"
 
 include:
+  - config/*.yml
   - resources/*.yml
 
-variables:
-  # The JSON is exported from the dev space, so its tables use the dev catalog. Bundles do not substitute
-  # variables inside that file, so scripts/set_catalog.sh swaps dev_catalog for the target's catalog
-  # before deploying to qa or prod.
-  dev_catalog:
-    description: "Catalog the dev space reads."
-    default: freshcart_dev
-  catalog:
-    description: "This environment's catalog."
-  warehouse_id:
-    description: "SQL warehouse the space runs on, looked up by name in each workspace."
-    lookup:
-      warehouse: "Serverless Starter Warehouse"
-  title_suffix:
-    description: "Appended to the space title so environments can't be confused."
-    default: ""
-
+# The promotion path. Catalogs and titles come from config/project.yml; these targets only say
+# how and where each environment is deployed, which is the same for every space.
 targets:
-  # The shared dev space the editors work in (the existing space, adopted by the bootstrap workflow).
   dev:
     default: true
     mode: production
     workspace:
       root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
-    variables:
-      catalog: freshcart_dev
-      title_suffix: " [DEV]"
 
   qa:
     mode: production
     workspace:
       root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
-    variables:
-      catalog: freshcart_qa
-      title_suffix: " [QA]"
 
   prod:
     mode: production
     workspace:
       root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
-    variables:
-      catalog: freshcart

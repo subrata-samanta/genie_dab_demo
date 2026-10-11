@@ -7,8 +7,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import yaml
-
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import space_lib as S                                                      # noqa: E402
 
@@ -47,7 +45,8 @@ def check(space: dict, text: str, dev_catalog: str) -> tuple[list[str], list[str
     other = S.catalogs(space) - {dev_catalog}
     if other:
         errors.append(f"data sources must use the dev catalog {dev_catalog!r} (the JSON is exported from dev); "
-                      f"found {sorted(other)}")
+                      f"found {sorted(other)}. If this is a new space, set variables.dev_catalog.default in "
+                      f"config/project.yml to the catalog it actually reads.")
     graded = [b for b in S.get(space, ("benchmarks", "questions"))
               if any(a.get("format") == "SQL" and a.get("content") for a in b.get("answer", []))]
     if not graded:
@@ -57,8 +56,7 @@ def check(space: dict, text: str, dev_catalog: str) -> tuple[list[str], list[str
 
 
 def main() -> int:
-    cfg = yaml.safe_load((S.ROOT / "databricks.yml").read_text(encoding="utf-8"))
-    dev_catalog = cfg["variables"]["dev_catalog"]["default"]
+    dev_catalog = S.setting("variables", "dev_catalog", "default")
     if not S.SPACE_FILE.exists():
         print(f"{S.SPACE_FILE.relative_to(S.ROOT)} does not exist yet: run the bootstrap workflow first.")
         return 1
