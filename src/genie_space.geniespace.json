@@ -370,7 +370,7 @@
           "- What were net sales and margin by region last week? Last week always means the last completed fiscal week, Sunday to Saturday.\n",
           "- How are we trading year to date versus last year? Total business comparison. For comparable-store growth use fn_like_for_like_sales.\n",
           "\n",
-          "ff   fff\n",
+          "\n",
           "\n"
         ],
         "id": "533e1ade386f69fca6070ed7bbdc4b73"
