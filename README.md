@@ -34,6 +34,9 @@ changes in plain words. A reviewer merges it, and the pipeline does the rest.
 | **PR checks** | every pull request | format checks, `bundle validate`, and for the sync pull request the benchmarks on the dev space |
 | **3 · Release** | on merge to `main`; *Run workflow* | dev (+ smoke test) → QA (+ benchmark gate); with target `prod`: QA gate → approval → prod (+ smoke test, tag) |
 
+**Detailed documentation is in [`docs/`](docs/)**: the flow end to end, every workflow and
+script, every setting, the permission model, and the operations runbook.
+
 ---
 
 ## For editors (no git needed)
