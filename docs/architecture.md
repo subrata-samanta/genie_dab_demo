@@ -56,7 +56,7 @@ Everything else in the repository exists to move that file safely between three 
                       │
             3 · Release (manual, target prod, approval)
                       │
-                      └─► QA again ─► ⏸ approval ─► deploy ─► tag genie-prod-v9 ─► smoke test ─► prod space
+                      └─► QA again ─► approval ─► deploy ─► tag genie-prod-v9 ─► smoke test ─► prod space
 ```
 
 Note what is **not** automatic: nothing reaches prod without a human running the release workflow and a
@@ -71,7 +71,8 @@ to be found.
 | **QA** | a candidate, deployed from `main` | the pipeline only | benchmark gate (accuracy ≥ 80%) |
 | **prod** | what the business uses | the pipeline, after approval | smoke test |
 
-They are distinguished by **catalog**, not by workspace: `freshcart_dev`, `freshcart_qa`, `freshcart`.
+They are distinguished by one **catalog** each, named in `config/project.yml`. Separate workspaces work
+too: the host comes from the GitHub environment, so nothing in the repository assumes one or the other.
 The exported JSON always names the dev catalog, so `scripts/set_catalog.sh` rewrites it to the target's
 catalog in the throw-away CI checkout before deploying to QA or prod. That rewrite is never committed.
 

@@ -44,11 +44,12 @@ FROM   <catalog>.information_schema.routines
 WHERE  routine_name = '<the filter function>';
 ```
 
-In this workspace `governance.rls_region` guards `gold.fct_sales_line` and `gold.fct_inventory_daily`,
-admitting `fc_all_regions` or `fc_region_<region>`. The service principal must be in **`fc_all_regions`**.
-Group membership is account-wide, so one membership covers all three environments.
+The function body shows which groups it admits — typically one broad group that sees everything and
+several narrow ones that each see a slice. **Add the service principal to a group that admits every
+row.** Group membership is account-wide, so one membership covers all three environments.
 
-A region-scoped group would make the benchmark gate fail: its expected answers are whole-business figures.
+A narrow, slice-scoped group would make the benchmark gate fail: the expected answers in the benchmarks
+are whole-business figures, and a principal that sees one slice computes different numbers.
 
 ### 3. Warehouse and space permissions
 
@@ -79,11 +80,14 @@ python scripts/check_access.py --target dev
 
 That is the same check the pipeline runs before every deploy. Delete the secret afterwards.
 
-The decisive manual query, if you want to confirm by hand — a number for you and `NULL` for the service
-principal means a row filter, every time:
+The decisive manual query, if you want to confirm by hand. Run it as yourself and as the service
+principal: rows for you and nothing for it means a row filter, every time.
 
 ```sql
-SELECT MEASURE(net_sales) FROM <catalog>.semantic.sales_metrics;
+SELECT count(*) FROM <catalog>.<schema>.<a fact table>;
+
+-- a metric view has to be read through MEASURE()
+SELECT MEASURE(<a measure>) FROM <catalog>.<schema>.<a metric view>;
 ```
 
 ## The deployment folder

@@ -61,12 +61,12 @@ def main() -> int:
     bad = sum(1 for _, a, _ in results if a == "BAD")
     graded = good + bad
     accuracy = good / graded if graded else 0.0
-    icons = {"GOOD": "✅", "BAD": "❌", "NEEDS_REVIEW": "❔"}
+    marks = {"GOOD": "PASS", "BAD": "FAIL", "NEEDS_REVIEW": "REVIEW"}
     headline = (f"Benchmarks: {good}/{graded} graded correct ({accuracy:.0%}, threshold {threshold:.0%}), "
                 f"{len(results) - graded} need review")
     print("\n" + headline)
     for question, assessment, reasons in results:
-        print(f"  {icons.get(assessment, '?')} {question}" + (f"  [{reasons}]" if assessment == "BAD" and reasons else ""))
+        print(f"  [{marks.get(assessment, '?'):^6}] {question}" + (f"  [{reasons}]" if assessment == "BAD" and reasons else ""))
     if not graded:
         verdict = "GATE FAILED: no benchmark could be graded automatically (add benchmarks with a SQL answer)"
     elif accuracy < threshold:
@@ -76,9 +76,9 @@ def main() -> int:
     print("\n" + verdict)
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as fh:
-            fh.write(f"### {'✅' if verdict == 'Gate passed.' else '❌'} {headline}\n\n| | Question | Reason |\n|---|---|---|\n")
+            fh.write(f"### {headline}\n\n| Result | Question | Reason |\n|---|---|---|\n")
             for question, assessment, reasons in results:
-                fh.write(f"| {icons.get(assessment, '?')} | {question} | {reasons if assessment == 'BAD' else ''} |\n")
+                fh.write(f"| {marks.get(assessment, '?')} | {question} | {reasons if assessment == 'BAD' else ''} |\n")
             fh.write(f"\n**{verdict}**\n")
     return 0 if verdict == "Gate passed." else 1
 

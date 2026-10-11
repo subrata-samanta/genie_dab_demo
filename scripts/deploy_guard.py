@@ -129,8 +129,9 @@ def main(argv=None) -> int:
         _output(f"matches={'true' if matches else 'false'}")
         return 0
     verdict, deploy, why = decide(plan, S.load(args.space_file), args.on_ui_edits)
-    icon = {"ok": "✅", "keep": "⏸️", "overwrite": "⚠️", "refuse": "⛔", "destroy": "⛔"}[verdict]
-    print(f"{icon} {why}")
+    label = {"ok": "OK", "keep": "SKIPPED", "overwrite": "OVERWRITING",
+             "refuse": "REFUSED", "destroy": "STOPPED"}[verdict]
+    print(f"{label}: {why}")
     _output(f"deploy={'true' if deploy else 'false'}")
     if os.environ.get("GITHUB_STEP_SUMMARY") and verdict != "ok":
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as fh:

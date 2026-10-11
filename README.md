@@ -23,7 +23,7 @@ changes in plain words. A reviewer merges it, and the pipeline does the rest.
                                3 · Release (on merge) ──► dev   deploy + smoke test ──►  dev space
                                  │                     └► QA    deploy + benchmark gate ►  QA space
                                3 · Release (Run workflow, target prod)
-                                 └─► QA gate again ─► ⏸ approval ─► prod deploy + smoke test ─► prod space
+                                 └─► QA gate again ─► approval ─► prod deploy + smoke test ─► prod space
                                                                     └─► tag genie-prod-v<n>
 ```
 
@@ -51,7 +51,7 @@ Edit only the **dev** space. QA and prod are read-only for everyone; changes mad
 
 ## For reviewers
 
-The pull request shows each change in words (➕ added, ➖ removed, ✏️ changed, with the exact change under
+The pull request shows each change in words (`[+]` added, `[-]` removed, `[~]` changed, with the exact change under
 *Exact changes*) and its checks:
 
 | Check | Meaning |
@@ -122,16 +122,16 @@ can be copied forward without re-doing any configuration.
    `src/*.geniespace.json` — bootstrap writes it for the new space.
 2. **Edit `config/project.yml`** — all of it, and nothing else:
 
-   | Setting | What to put |
-   |---|---|
-   | `bundle.name` | a short unique name, e.g. `genie-finance-assistant`. Databricks records the adopted space under it, so **pick it once**: changing it later makes the bundle forget the space and try to create a new one |
-   | `space_title` | the title shown in the Genie list (the `[DEV]` / `[QA]` suffix is added for you) |
-   | `space_description` | one line, shown under the title |
-   | `warehouse_name` | a SQL warehouse with this name must exist in **every** workspace |
-   | `dev_catalog` | the catalog the dev space actually reads — must match what is inside the exported JSON |
-   | `targets.*.catalog` | the catalog for dev, qa and prod |
-   | `space_permissions` | the groups that can run, edit and manage the space. They must already exist in the workspace, and deploying sets **exactly** this list |
-   | `deployment_root` | usually leave as is. Write access on it should belong only to the deploying service principal |
+  | Setting | What to put |
+  |---|---|
+  | `bundle.name` | a short unique name, e.g. `genie-finance-assistant`. Databricks records the adopted space under it, so **pick it once**: changing it later makes the bundle forget the space and try to create a new one |
+  | `space_title` | the title shown in the Genie list (the `[DEV]` / `[QA]` suffix is added for you) |
+  | `space_description` | one line, shown under the title |
+  | `warehouse_name` | a SQL warehouse with this name must exist in **every** workspace |
+  | `dev_catalog` | the catalog the dev space actually reads — must match what is inside the exported JSON |
+  | `targets.*.catalog` | the catalog for dev, qa and prod |
+  | `space_permissions` | the groups that can run, edit and manage the space. They must already exist in the workspace, and deploying sets **exactly** this list |
+  | `deployment_root` | usually leave as is. Write access on it should belong only to the deploying service principal |
 
 3. **Set up Databricks and GitHub** for the new space: [One-time setup](#one-time-setup-admin) below — a
    service principal, its grants, its row-filter group, and the three GitHub environments.
@@ -184,13 +184,13 @@ catalog the new space reads. Set it to the catalog named in the error and re-run
 
    ```sql
    SELECT table_schema, table_name, filter_name FROM <catalog>.information_schema.row_filters;
-   SELECT routine_definition FROM <catalog>.information_schema.routines WHERE routine_name = 'rls_region';
+   SELECT routine_definition FROM <catalog>.information_schema.routines WHERE routine_name = '<filter function>';
    ```
 
-   Here `rls_region` guards `gold.fct_sales_line` and `gold.fct_inventory_daily` and admits `fc_all_regions`
-   or `fc_region_<region>`; the service principal needs **`fc_all_regions`** (group membership is account-wide,
-   so it covers all three environments). A region-scoped group would make the benchmark gate fail: its expected
-   answers are whole-business figures.
+   The function body shows which groups it admits, usually one broad group that sees everything and several
+   narrow ones that each see a slice. Add the service principal to a group that admits **every** row; group
+   membership is account-wide, so one covers all three environments. A slice-scoped group would make the
+   benchmark gate fail, because the expected answers in the benchmarks are whole-business figures.
 5. **Sharing is code**: `space_permissions` in `config/project.yml` is applied on every deployment and is
    **exact** — whatever is listed becomes the space's access, and anything granted by hand in the UI is
    removed. The groups must exist in the workspace first or the deployment fails. Workspace admins and the
@@ -239,9 +239,9 @@ export DATABRICKS_AUTH_TYPE=oauth-m2m
 
 | Query, run as the service principal | Expected | If not |
 |---|---|---|
-| `SHOW TABLES IN <catalog>.gold` | every fact and dimension listed | a missing table has no `SELECT`: step 1.3 |
-| `SELECT MEASURE(net_sales) FROM <catalog>.semantic.sales_metrics` | a number | `NULL` means a row filter excludes every row: step 1.4 |
-| `SELECT region, MEASURE(net_sales) FROM <catalog>.semantic.sales_metrics WHERE is_last_completed_fiscal_week GROUP BY ALL` | one row per region | as above |
+| `SHOW TABLES IN <catalog>.<schema>` | every fact and dimension the space uses is listed | a missing table has no `SELECT`: step 1.3 |
+| `SELECT count(*) FROM <catalog>.<schema>.<a fact table>` | a non-zero count | zero means a row filter excludes every row: step 1.4 |
+| `SELECT MEASURE(<a measure>) FROM <catalog>.<schema>.<a metric view>` | a value, not `NULL` | as above |
 
 Then the real thing — the same questions CI asks:
 
@@ -327,7 +327,7 @@ tests/benchmark_gate.py                 Genie benchmark evaluation with a thresh
 - **Who changed what**: Genie doesn't record which editor made an edit; the pull request shows *what* changed and
   when it was captured. Ask editors to mention their change in the pull request if you need attribution.
 - **Edit the JSON by hand only with care**: the sync always exports dev, so a change made only in git and not in
-  dev is undone by the next sync pull request (the reviewer would see it as ➖/✏️). Make changes in dev.
+  dev is undone by the next sync pull request (the reviewer would see it as [-]/[~]). Make changes in dev.
 - **Benchmarks are the gate**: with no benchmark questions that have a SQL answer, the gate fails. Genie's answers
   vary a little between runs; set the threshold accordingly, and re-run a failed check once before investigating.
   The benchmark API is in Beta.

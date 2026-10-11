@@ -14,7 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import space_lib as S                                                      # noqa: E402
 
-ICONS = {"added": "➕", "removed": "➖", "changed": "✏️"}
+MARKS = {"added": "[+]", "removed": "[-]", "changed": "[~]"}
 
 
 def changes(old: dict, new: dict) -> list[dict]:
@@ -47,7 +47,7 @@ def markdown(found: list[dict]) -> str:
         return "_No changes._\n"
     lines = []
     for c in found:
-        lines.append(f"- {ICONS[c['what']]} **{c['what']} {c['kind']}**: {c['label']}")
+        lines.append(f"- `{MARKS[c['what']]}` **{c['what']} {c['kind']}**: {c['label']}")
     details = [c for c in found if c["diff"]]
     if details:
         lines.append("\n<details><summary>Exact changes</summary>\n")

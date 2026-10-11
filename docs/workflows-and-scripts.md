@@ -65,7 +65,7 @@ Make **format** and **validate** required checks in branch protection.
 | push to `main` | check → dev → QA |
 | *Run workflow*, target `dev` | check → dev |
 | *Run workflow*, target `qa` | check → QA |
-| *Run workflow*, target `prod` | check → QA → ⏸ approval → prod |
+| *Run workflow*, target `prod` | check → QA → [approval] approval → prod |
 
 Prod is never reached by a push — its job requires `github.event_name == 'workflow_dispatch'` and
 `inputs.target == 'prod'`. And it requires the QA job to have succeeded **in the same run**, so prod
@@ -158,8 +158,8 @@ python scripts/describe_changes.py OLD.json NEW.json     # Markdown
 python scripts/describe_changes.py --same OLD.json NEW.json   # exit 0 if identical
 ```
 
-Turns two versions of the space JSON into a change list a reviewer can read: *➕ added benchmark
-question*, *✏️ changed instruction*, with the exact diff in a collapsed block. Used in the dev-sync pull
+Turns two versions of the space JSON into a change list a reviewer can read: *[+] added benchmark
+question*, *[~] changed instruction*, with the exact diff in a collapsed block. Used in the dev-sync pull
 request body, the bootstrap pull request, and the PR-checks summary.
 
 `--same` ignores list order, which is why the sync does not open pull requests for re-ordered exports.

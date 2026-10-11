@@ -59,9 +59,9 @@ in git rather than drifting in a dialog box.
 ```yaml
 space_permissions:
   - level: CAN_MANAGE
-    group_name: freshcart-genie-deployers
+    group_name: <release managers group>
   - level: CAN_RUN
-    group_name: freshcart-business-users
+    group_name: <readers group>
 ```
 
 Valid levels for a Genie space: `CAN_READ`, `CAN_RUN`, `CAN_EDIT`, `CAN_MANAGE`.

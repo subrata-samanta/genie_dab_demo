@@ -33,7 +33,7 @@ Every field, and what to put in it.
 
 ```yaml
 bundle:
-  name: genie-dab-demo          # -> genie-supply-chain
+  name: <short-unique-name>          # e.g. genie-supply-chain
 ```
 
 A short unique name. It names the deployment folder and the record Databricks keeps of the adopted space.
@@ -46,9 +46,9 @@ A short unique name. It names the deployment folder and the record Databricks ke
 
 ```yaml
   space_title:
-    default: "FreshCart Sales & Stock Assistant"     # -> "Supply Chain Assistant"
+    default: "<Space Title>"                 # e.g. "Supply Chain Assistant"
   space_description:
-    default: "Ask about sales, margin, ..."          # -> "Ask about shipments, lead times, ..."
+    default: "<one line about what it answers>"
 ```
 
 `space_title` is the name **without** the environment suffix — `[DEV]` and `[QA]` are appended
@@ -58,7 +58,7 @@ automatically, and prod gets none.
 
 ```yaml
   warehouse_name:
-    default: "Serverless Starter Warehouse"
+    default: "<SQL warehouse name>"       # e.g. Serverless Starter Warehouse
 ```
 
 A warehouse with this **name** must exist in every workspace you deploy to; it is looked up per
@@ -71,17 +71,17 @@ Leave it as is if every environment already has a warehouse by that name.
 
 ```yaml
   dev_catalog:
-    default: freshcart_dev        # -> sc_dev
+    default: <dev catalog>
 targets:
   dev:
     variables:
-      catalog: freshcart_dev      # -> sc_dev
+      catalog: <dev catalog>
   qa:
     variables:
-      catalog: freshcart_qa       # -> sc_qa
+      catalog: <qa catalog>
   prod:
     variables:
-      catalog: freshcart          # -> sc_prod
+      catalog: <prod catalog>
 ```
 
 `dev_catalog` is load-bearing and easy to get wrong. It must match the catalog the **exported JSON
@@ -96,19 +96,19 @@ You will usually not know it until after bootstrap. That is fine — see step 5.
   space_permissions:
     default:                                      # qa and prod
       - level: CAN_MANAGE
-        group_name: freshcart-genie-deployers     # -> your release managers
+        group_name: <release managers group>
       - level: CAN_RUN
-        group_name: freshcart-business-users      # -> your readers
+        group_name: <readers group>
 targets:
   dev:
     variables:
       space_permissions:                          # dev also lets the editors edit
         - level: CAN_MANAGE
-          group_name: freshcart-genie-deployers
+          group_name: <release managers group>
         - level: CAN_EDIT
-          group_name: freshcart-genie-developers  # -> your Genie editors
+          group_name: <editors group>
         - level: CAN_RUN
-          group_name: freshcart-business-users
+          group_name: <readers group>
 ```
 
 Three groups to replace. **They must already exist in the workspace** or the deployment fails.
