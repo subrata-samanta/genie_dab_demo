@@ -2,7 +2,7 @@
 
 This repository versions a Databricks **Genie space** and promotes it from dev to QA to prod with GitHub Actions
 and Declarative Automation Bundles (`databricks bundle deploy`), following Databricks' recommended approach:
-the `genie_spaces` bundle resource, separate workspaces, one service principal per environment with
+the `genie_spaces` bundle resource, one workspace and one service principal per environment with
 passwordless login (workload identity federation), trunk-based `main`, benchmarks as the quality gate, and
 approved, tagged releases to prod.
 
@@ -163,6 +163,33 @@ catalog the new space reads. Set it to the catalog named in the error and re-run
 ---
 
 ## One-time setup (admin)
+
+### How the environments are separated
+
+Each environment is its own **Databricks workspace**, pinned in `config/project.yml` as
+`targets.<env>.workspace.host`.
+
+That pin is **authoritative**. In CI it takes precedence over the environment's `DATABRICKS_HOST`, so a
+mis-set GitHub variable cannot redirect a deploy into another environment's workspace — the bundle
+decides where its own content goes. Locally, running against a profile for a different workspace is
+refused outright:
+
+```
+Error: cannot resolve bundle auth configuration: the host in the profile (...)
+       doesn't match the host configured in the bundle (...)
+```
+
+Set `DATABRICKS_HOST` per GitHub environment anyway: it is what the Databricks CLI authenticates with,
+and the credentials must be valid in the pinned workspace. If they are not, the run fails to
+authenticate — still better than deploying somewhere unintended.
+
+With a workspace per environment the catalog may keep the **same name** in each, since the workspace
+already separates them — `set_catalog.sh` then does nothing, and `title_suffix` is optional.
+
+Sharing one workspace across all three also works: repeat the same host, give the catalogs different
+names, and keep the `[DEV]` / `[QA]` suffixes so the spaces are distinguishable in one list. It is the
+weaker isolation — one compromised principal reaches every environment's data — so prefer separate
+workspaces where your organisation has them.
 
 ### 1. Databricks, per environment (dev, qa, prod)
 1. **The data** the space reads exists in each environment's catalog (deploy it before the space: a space can't

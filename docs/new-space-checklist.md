@@ -67,6 +67,29 @@ or Pro for Genie.
 
 Leave it as is if every environment already has a warehouse by that name.
 
+### The workspace per environment
+
+```yaml
+targets:
+  dev:
+    workspace:
+      host: https://<dev workspace>.cloud.databricks.com
+  qa:
+    workspace:
+      host: https://<qa workspace>.cloud.databricks.com
+  prod:
+    workspace:
+      host: https://<prod workspace>.cloud.databricks.com
+```
+
+This is where each environment actually deploys, and it wins over `DATABRICKS_HOST` in CI — so a
+mis-set GitHub variable cannot send a deploy to the wrong workspace. Set `DATABRICKS_HOST` per GitHub
+environment too: it is what the CLI authenticates with, and those credentials must be valid in the
+pinned workspace.
+
+If all three environments share one workspace, repeat the same host. Delete the `workspace:` blocks to
+take the host only from `DATABRICKS_HOST`.
+
 ### The catalogs
 
 ```yaml
@@ -87,6 +110,10 @@ targets:
 `dev_catalog` is load-bearing and easy to get wrong. It must match the catalog the **exported JSON
 actually references**, because `set_catalog.sh` rewrites exactly that string when deploying to QA and
 prod, and `check_space.py` rejects a space that references anything else.
+
+With a workspace per environment the catalog can keep the **same name** in all three — the workspace
+already separates them — in which case set all four values the same and `set_catalog.sh` rewrites
+nothing.
 
 You will usually not know it until after bootstrap. That is fine — see step 5.
 

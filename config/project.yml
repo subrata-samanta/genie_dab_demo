@@ -2,96 +2,136 @@
 # THE ONLY FILE YOU EDIT when you clone this repository for a new Genie space.
 # Everything else - workflows, scripts, tests - is the same for every space.
 #
-# After editing, run:  databricks bundle validate -t dev
-# Then: Actions -> 1 - Bootstrap, with the id of the dev space to adopt.
+# Every value appears exactly once. Fill in the sections marked FILL IN; leave the derived section alone.
+#
+# After bootstrapping, check it with:  databricks bundle validate -t dev
 #
 # NOT here, on purpose:
-#   * which workspace, and which service principal the pipeline runs as. Those are an identity per
-#     environment, not per space, so they live in GitHub: Settings -> Environments -> dev / qa / prod,
-#     as DATABRICKS_HOST and DATABRICKS_CLIENT_ID (and the DATABRICKS_CLIENT_SECRET secret, if you are
-#     not using workload identity federation). Locally they come from your CLI profile instead.
-#   * grants, group membership and row-filter groups for that principal. See README, "One-time setup".
+#   * the service principal each environment runs as. That is an identity per environment, not per
+#     space, so it lives in GitHub: Settings -> Environments -> dev / qa / prod, as DATABRICKS_CLIENT_ID
+#     (and the DATABRICKS_CLIENT_SECRET secret, if you are not using workload identity federation).
+#   * grants, group membership and row-filter groups for that principal. See docs/access-and-identity.md.
 # =============================================================================
 
 bundle:
-  # Unique per space: names the deployment folder and the state Databricks keeps.
-  # Changing it later makes Databricks forget the space it adopted, so pick once.
+  # FILL IN. Unique per space; names the deployment folder and the record Databricks keeps of the
+  # adopted space. Changing it later makes the bundle forget that space, so pick it once.
   name: genie-dab-demo
 
 variables:
-  # ---- the space itself -----------------------------------------------------
+
+  # ===========================================================================
+  # FILL IN - the space
+  # ===========================================================================
   space_title:
-    description: "Title of the space. The environment suffix below is appended to it."
+    description: "Title of the space. The environment suffix is appended to it."
     default: "FreshCart Sales & Stock Assistant"
   space_description:
     description: "One line, shown under the title in the Genie list."
     default: "Ask about sales, margin, baskets, promotions and stock across FreshCart stores and online."
 
-  # ---- where it runs --------------------------------------------------------
+  # ===========================================================================
+  # FILL IN - where it runs and what it reads
+  # ===========================================================================
   warehouse_name:
-    description: "SQL warehouse the space runs on, looked up by name in each workspace."
+    description: >-
+      SQL warehouse, looked up by this name in each environment's workspace. Use a serverless warehouse:
+      Databricks recommends never Classic or Pro for Genie. If one environment names its warehouse
+      differently, override warehouse_name for that target below.
     default: "Serverless Starter Warehouse"
-
-  # ---- the data -------------------------------------------------------------
   dev_catalog:
     description: >-
-      Catalog the dev space reads. Must match the catalog in src/*.geniespace.json, which is exported
-      from dev; scripts/set_catalog.sh rewrites it to the target's catalog for qa and prod.
+      Catalog the dev space reads. Must match the catalog inside src/*.geniespace.json, which is exported
+      from dev. It is also the default for every environment, so when each environment has its own
+      workspace and the catalog is named the same in all of them, this is the only catalog you set.
     default: freshcart_dev
-  catalog:
-    description: "This environment's catalog. Set per target below."
 
-  # ---- who can use the space ------------------------------------------------
-  # Applied on EVERY deployment, and it is exact: whatever is listed here becomes the space's access,
-  # and anything granted by hand in the UI is removed. That is the point - access is reviewed in git.
-  # The groups must already exist in the workspace, or the deployment fails.
-  # Workspace admins and the deploying service principal keep access regardless (inherited).
+  # ===========================================================================
+  # FILL IN - who can use the space. The groups must already exist in the workspace.
+  # Access is applied on EVERY deployment and is exact: whatever these produce becomes the space's
+  # access, and anything granted by hand in the Genie UI is removed. That is the point - access is
+  # reviewed in git. Workspace admins and the deploying service principal keep access regardless.
+  # ===========================================================================
+  deployers_group:
+    description: "Runs releases; can change the space in any environment."
+    default: freshcart-genie-deployers
+  editors_group:
+    description: "Edits the dev space in the Genie UI. dev only."
+    default: freshcart-genie-developers
+  readers_group:
+    description: "Asks questions. Every environment."
+    default: freshcart-business-users
+
+  # ===========================================================================
+  # Derived - leave these alone
+  # ===========================================================================
+  catalog:
+    description: "This environment's catalog. Defaults to dev_catalog; override per target when it differs."
+    default: ${var.dev_catalog}
   space_permissions:
-    description: "Access to the space in qa and prod. dev adds the editors; see targets below."
+    description: "Access in qa and prod. dev adds the editors; see the dev target below."
     type: complex
     default:
       - level: CAN_MANAGE
-        group_name: freshcart-genie-deployers
+        group_name: ${var.deployers_group}
       - level: CAN_RUN
-        group_name: freshcart-business-users
-
-  # ---- where the bundle keeps its deployment state --------------------------
-  # Deliberately NOT under /Workspace/Users/<whoever deploys>: the state would then depend on the
-  # identity running the deploy, and a deploy from a different identity would not find the space and
-  # would create a second one. Restrict write access on this folder to the deploying service principal.
-  deployment_root:
-    description: "Parent folder for the bundle's deployment state, the same for every identity."
-    default: /Workspace/Applications
-
-  # ---- filled in automatically; no need to touch ----------------------------
+        group_name: ${var.readers_group}
   title_suffix:
-    description: "Appended to space_title so environments can't be confused."
+    description: "Appended to space_title so environments cannot be confused."
     default: ""
   warehouse_id:
     description: "Resolved from warehouse_name in each workspace."
     lookup:
       warehouse: ${var.warehouse_name}
+  deployment_root:
+    description: >-
+      Parent folder for the bundle's record of the space. Deliberately not under
+      /Workspace/Users/<whoever deploys>: the record would then depend on the identity running the
+      deploy, and a deploy by anyone else would not find the space and would create a second one.
+      Restrict write access on this folder to the deploying service principal.
+    default: /Workspace/Applications
 
-# One catalog per environment. The environments themselves (dev -> qa -> prod) are fixed:
-# they are wired into the workflows and the GitHub environment names.
+# =============================================================================
+# FILL IN - one workspace per environment.
+#
+# `host` is where this environment deploys, and it is AUTHORITATIVE: in CI it takes precedence over
+# DATABRICKS_HOST, so a mis-set GitHub variable cannot redirect a deploy into another environment's
+# workspace. Locally, a profile for a different workspace is refused outright. The environment's
+# credentials must still be valid in the pinned workspace.
+#
+# A workspace per environment is the stronger isolation and what Databricks recommends; the catalog can
+# then be named the same everywhere, so delete the `catalog:` lines below and set only dev_catalog.
+# One shared workspace also works: repeat the same host, and keep the different catalogs and suffixes.
+# Delete the `workspace:` blocks entirely to take the host only from DATABRICKS_HOST.
+#
+# The environments themselves (dev -> qa -> prod) are fixed: they are wired into the workflows and must
+# match the GitHub environment names.
+# =============================================================================
 targets:
+
   dev:
+    workspace:
+      host: https://dbc-dce5877f-fc61.cloud.databricks.com
     variables:
-      catalog: freshcart_dev
       title_suffix: " [DEV]"
       # Only dev is editable: that is where the editors work, and the sync exports what they change.
       space_permissions:
         - level: CAN_MANAGE
-          group_name: freshcart-genie-deployers
+          group_name: ${var.deployers_group}
         - level: CAN_EDIT
-          group_name: freshcart-genie-developers
+          group_name: ${var.editors_group}
         - level: CAN_RUN
-          group_name: freshcart-business-users
+          group_name: ${var.readers_group}
+
   qa:
+    workspace:
+      host: https://dbc-dce5877f-fc61.cloud.databricks.com
     variables:
       catalog: freshcart_qa
       title_suffix: " [QA]"
+
   prod:
+    workspace:
+      host: https://dbc-dce5877f-fc61.cloud.databricks.com
     variables:
       catalog: freshcart
-      title_suffix: ""

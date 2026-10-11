@@ -71,10 +71,15 @@ to be found.
 | **QA** | a candidate, deployed from `main` | the pipeline only | benchmark gate (accuracy ≥ 80%) |
 | **prod** | what the business uses | the pipeline, after approval | smoke test |
 
-They are distinguished by one **catalog** each, named in `config/project.yml`. Separate workspaces work
-too: the host comes from the GitHub environment, so nothing in the repository assumes one or the other.
-The exported JSON always names the dev catalog, so `scripts/set_catalog.sh` rewrites it to the target's
-catalog in the throw-away CI checkout before deploying to QA or prod. That rewrite is never committed.
+Each is its own **Databricks workspace**, pinned per target in `config/project.yml`
+(`targets.<env>.workspace.host`) and supplied to CI as that GitHub environment's `DATABRICKS_HOST`. The
+two must agree or the CLI refuses to run — which is what stops one environment's content reaching
+another's workspace when credentials are wrong.
+
+The catalog may then keep the **same name** in every workspace, since the workspace already separates
+them. Where it does not — including when all three share one workspace — the exported JSON always names
+the dev catalog, so `scripts/set_catalog.sh` rewrites it to the target's catalog in the throw-away CI
+checkout before deploying. That rewrite is never committed, and it does nothing when the names match.
 
 ## Why each guard exists
 

@@ -40,12 +40,41 @@ try to create a second one. (It will not succeed — `deploy_guard.py` refuses �
 |---|---|
 | `warehouse_name` | a SQL warehouse with this **name** must exist in every workspace; it is looked up per environment. Use a **serverless** warehouse — Databricks recommends never Classic or Pro for Genie |
 
+### The workspace per environment
+
+```yaml
+targets:
+  dev:
+    workspace:
+      host: https://<dev workspace>.cloud.databricks.com
+```
+
+The workspace each environment deploys to, and it is **authoritative**:
+
+- **In CI** it takes precedence over that environment's `DATABRICKS_HOST`. A mis-set GitHub variable
+  cannot redirect a deploy into another environment's workspace — the bundle decides where its content
+  goes. The credentials still have to be valid in the pinned workspace, so a mismatched principal fails
+  to authenticate rather than deploying somewhere unintended.
+- **Locally**, a profile pointing at a different workspace is refused outright:
+  `the host in the profile doesn't match the host configured in the bundle`.
+
+Without the pin, the destination is whatever `DATABRICKS_HOST` happens to be — which is exactly the
+failure mode worth removing. Delete the `workspace:` blocks only if you want that behaviour back.
+
+A workspace per environment is the stronger isolation and what Databricks recommends. One shared
+workspace also works — repeat the same host — but then a single compromised principal reaches every
+environment's data.
+
 ### The data
 
 | Variable | |
 |---|---|
 | `dev_catalog` | the catalog the dev space reads. Must match what is inside the exported JSON, or the format check fails |
 | `targets.<env>.catalog` | the catalog for each environment |
+
+With a workspace per environment the catalog may keep the **same name** everywhere; `set_catalog.sh` then
+rewrites nothing and `title_suffix` becomes optional. Different names per environment work too, which is
+required when the environments share a workspace.
 
 `dev_catalog` is load-bearing: `set_catalog.sh` rewrites exactly that string when deploying to QA and
 prod, and `check_space.py` enforces that the JSON references nothing else.
