@@ -4,6 +4,27 @@
 set -euo pipefail
 
 env_name="${TARGET_ENV:-?}"
+
+# A setting pasted into GitHub with a trailing newline reaches the CLI as "https://host\r\n" and fails
+# with 'net/url: invalid control character in URL' in whatever step first calls the CLI, far from the
+# cause. Strip stray whitespace here and re-export the clean value for the job's later steps.
+trim() { printf '%s' "${1-}" | tr -d '\r\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'; }
+cleaned=()
+for name in DATABRICKS_HOST DATABRICKS_CLIENT_ID DATABRICKS_CLIENT_SECRET; do
+  raw="${!name-}"
+  [[ -n "$raw" ]] || continue
+  clean="$(trim "$raw")"
+  [[ "$clean" == "$raw" ]] && continue
+  # The trimmed secret is a different string, so register it for masking too.
+  [[ "$name" == "DATABRICKS_CLIENT_SECRET" ]] && echo "::add-mask::$clean"
+  export "$name=$clean"
+  [[ -n "${GITHUB_ENV:-}" ]] && printf '%s=%s\n' "$name" "$clean" >> "$GITHUB_ENV"
+  cleaned+=("$name")
+done
+if (( ${#cleaned[@]} )); then
+  echo "::warning title=Stray whitespace in the Databricks settings for '$env_name'::Trimmed ${cleaned[*]}; re-enter the value(s) without a trailing newline (Settings → Environments → $env_name)."
+fi
+
 missing=()
 [[ -n "${DATABRICKS_HOST:-}" ]] || missing+=("DATABRICKS_HOST (the workspace URL, e.g. https://adb-123.azuredatabricks.net)")
 [[ -n "${DATABRICKS_CLIENT_ID:-}" ]] || missing+=("DATABRICKS_CLIENT_ID (the application id of the $env_name service principal)")
