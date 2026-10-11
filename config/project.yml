@@ -41,6 +41,28 @@ variables:
   catalog:
     description: "This environment's catalog. Set per target below."
 
+  # ---- who can use the space ------------------------------------------------
+  # Applied on EVERY deployment, and it is exact: whatever is listed here becomes the space's access,
+  # and anything granted by hand in the UI is removed. That is the point - access is reviewed in git.
+  # The groups must already exist in the workspace, or the deployment fails.
+  # Workspace admins and the deploying service principal keep access regardless (inherited).
+  space_permissions:
+    description: "Access to the space in qa and prod. dev adds the editors; see targets below."
+    type: complex
+    default:
+      - level: CAN_MANAGE
+        group_name: freshcart-genie-deployers
+      - level: CAN_RUN
+        group_name: freshcart-business-users
+
+  # ---- where the bundle keeps its deployment state --------------------------
+  # Deliberately NOT under /Workspace/Users/<whoever deploys>: the state would then depend on the
+  # identity running the deploy, and a deploy from a different identity would not find the space and
+  # would create a second one. Restrict write access on this folder to the deploying service principal.
+  deployment_root:
+    description: "Parent folder for the bundle's deployment state, the same for every identity."
+    default: /Workspace/Applications
+
   # ---- filled in automatically; no need to touch ----------------------------
   title_suffix:
     description: "Appended to space_title so environments can't be confused."
@@ -57,6 +79,14 @@ targets:
     variables:
       catalog: freshcart_dev
       title_suffix: " [DEV]"
+      # Only dev is editable: that is where the editors work, and the sync exports what they change.
+      space_permissions:
+        - level: CAN_MANAGE
+          group_name: freshcart-genie-deployers
+        - level: CAN_EDIT
+          group_name: freshcart-genie-developers
+        - level: CAN_RUN
+          group_name: freshcart-business-users
   qa:
     variables:
       catalog: freshcart_qa

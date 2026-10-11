@@ -10,11 +10,6 @@ resources:
       description: ${var.space_description}
       file_path: ../src/genie_space.geniespace.json
       warehouse_id: ${var.warehouse_id}
-      # No `permissions:` for now: the bundle leaves the space's sharing alone (share QA and prod by hand,
-      # like any Genie space). To manage access as code later, add for example:
-      #   permissions:
-      #     - level: CAN_RUN
-      #       group_name: <group of the business users>
-      #     - level: CAN_EDIT          # dev only, via a variable per target
-      #       group_name: <group of the editors>
-      # Deploying then sets exactly these permissions, so the groups must exist first.
+      # Access is code: deploying sets exactly this list and removes anything added by hand in the UI.
+      # Edit the groups in config/project.yml (space_permissions), per environment.
+      permissions: ${var.space_permissions}

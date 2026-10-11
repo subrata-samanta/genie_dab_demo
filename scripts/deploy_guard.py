@@ -41,6 +41,18 @@ def decide(plan: dict, local: dict, policy: str) -> tuple[str, bool, str]:
     if action in ("delete", "recreate"):
         return "destroy", False, f"the plan would {action} the Genie space: its URL and conversations would be lost"
     if action == "create":
+        twin = existing_space_titled(title_of(entry))
+        if twin:
+            return "destroy", False, (
+                f"the plan would CREATE a space, but {twin[1]!r} already exists in this workspace "
+                f"(id {twin[0]}). Deploying would make a second, duplicate space and leave the real one "
+                f"orphaned with its conversations.\n\n"
+                f"This happens when the bundle has no record of the space - a new deployment folder "
+                f"(workspace.root_path), a new service principal, or a renamed bundle. Point the bundle at "
+                f"the space that already exists instead of creating another:\n\n"
+                f"    databricks bundle deployment bind genie_space {twin[0]} -t <target> --auto-approve\n\n"
+                f"If you really do want a separate second space, give it a different space_title in "
+                f"config/project.yml.")
         return "ok", True, "first deployment to this environment: the space will be created"
     etag = (entry.get("changes") or {}).get("etag") or {}
     edited = etag.get("old") is not None and etag.get("old") != etag.get("remote")
@@ -64,6 +76,30 @@ def decide(plan: dict, local: dict, policy: str) -> tuple[str, bool, str]:
     return "refuse", False, (f"the space was edited in the UI since the last deployment {since}, which nobody "
                              "should do in this environment. Re-make the change in dev (it then comes through a "
                              "pull request), or rerun with overwrite to discard it.\n" + detail)
+
+
+def title_of(entry: dict) -> str:
+    return ((entry.get("new_state") or {}).get("value") or {}).get("title", "")
+
+
+def existing_space_titled(title: str):
+    """(space_id, title) of a space already in the workspace with this title, else None.
+
+    A `create` plan means the bundle has no record of the space - which is also what a moved deployment
+    folder or a different service principal looks like. Deploying then duplicates a live space, so the
+    workspace, not the bundle's state, has to answer whether the space is really new.
+    """
+    if not title:
+        return None
+    try:
+        from databricks.sdk import WorkspaceClient
+        for space in WorkspaceClient().genie.list_spaces().spaces or []:
+            if (space.title or "").strip() == title.strip():
+                return space.space_id, space.title
+    except Exception as exc:                        # no SDK, or no permission to list: don't block the deploy
+        print(f"note: could not check for an existing space with this title ({type(exc).__name__}); "
+              f"skipping the duplicate check")
+    return None
 
 
 def live_matches(plan: dict, local: dict) -> bool:

@@ -89,6 +89,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install --quiet databricks-sdk pyyaml
+      - name: Can this service principal read the data?
+        run: python scripts/check_access.py --target dev
       - name: Check the live dev space
         id: guard
         env:
@@ -129,6 +131,8 @@ jobs:
       - run: pip install --quiet databricks-sdk pyyaml
       - name: Point the space at the QA catalog
         run: bash scripts/set_catalog.sh qa
+      - name: Can this service principal read the data?
+        run: python scripts/check_access.py --target qa
       - name: Check the live QA space
         run: |
           databricks bundle plan -t qa -o json > "$RUNNER_TEMP/plan.json"
@@ -162,6 +166,8 @@ jobs:
       - run: pip install --quiet databricks-sdk pyyaml
       - name: Point the space at the prod catalog
         run: bash scripts/set_catalog.sh prod
+      - name: Can this service principal read the data?
+        run: python scripts/check_access.py --target prod
       - name: Check the live prod space
         env:
           POLICY: ${{ inputs.overwrite_prod_edits && 'overwrite' || 'refuse' }}

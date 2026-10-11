@@ -90,6 +90,8 @@ can be copied forward without re-doing any configuration.
    | `warehouse_name` | a SQL warehouse with this name must exist in **every** workspace |
    | `dev_catalog` | the catalog the dev space actually reads — must match what is inside the exported JSON |
    | `targets.*.catalog` | the catalog for dev, qa and prod |
+   | `space_permissions` | the groups that can run, edit and manage the space. They must already exist in the workspace, and deploying sets **exactly** this list |
+   | `deployment_root` | usually leave as is. Write access on it should belong only to the deploying service principal |
 
 3. **Set up Databricks and GitHub** for the new space: [One-time setup](#one-time-setup-admin) below — a
    service principal, its grants, its row-filter group, and the three GitHub environments.
@@ -145,10 +147,39 @@ catalog the new space reads. Set it to the catalog named in the error and re-run
    or `fc_region_<region>`; the service principal needs **`fc_all_regions`** (group membership is account-wide,
    so it covers all three environments). A region-scoped group would make the benchmark gate fail: its expected
    answers are whole-business figures.
-5. **Sharing**: the bundle does not manage who can use the spaces (no `permissions:` in
-   `resources/genie_space.genie_space.yml` for now). The dev space keeps its sharing. QA and prod are created
-   by the service principal, so share them once by hand (Share → *Can run* for users, who also need `SELECT`
-   on the data). To manage access as code later, see the comment in that file.
+5. **Sharing is code**: `space_permissions` in `config/project.yml` is applied on every deployment and is
+   **exact** — whatever is listed becomes the space's access, and anything granted by hand in the UI is
+   removed. The groups must exist in the workspace first or the deployment fails. Workspace admins and the
+   deploying service principal keep access regardless (inherited), and `mode: production` adds the deploying
+   identity as `CAN_MANAGE`, so a deployment cannot lock everyone out. dev grants `CAN_EDIT` to the editors;
+   qa and prod are `CAN_RUN` only, because the way to change them is to edit dev and promote.
+6. **A deployment folder per environment**: `deployment_root` (default `/Workspace/Applications`) holds the
+   bundle's record of the space. Restrict write access on it to the service principal that deploys that
+   environment. It deliberately does not contain the deploying user's name — see *Why `root_path` has no
+   user in it* below.
+
+### 1a. Why `root_path` has no user in it, and what to do when you move it
+
+The bundle keeps its record of the space under `workspace.root_path`. If that path contains
+`${workspace.current_user.userName}`, the record lives in the *deploying identity's* home folder — so a
+deploy by anyone else (a second service principal, or a person running `bundle deploy` by hand) finds no
+record, concludes the space does not exist, and **creates a second one**, leaving the real space orphaned
+with its conversations. `deployment_root` therefore names a fixed folder instead.
+
+`scripts/deploy_guard.py` refuses any plan that would create a space when one with the same title already
+exists, and prints the command below — so this fails loudly instead of silently duplicating.
+
+**Whenever you change `deployment_root`, `bundle.name`, or the deploying service principal**, the bundle
+loses its record and must be pointed back at the existing space, once per environment:
+
+```bash
+databricks bundle deployment bind genie_space <space-id> -t dev  --auto-approve
+databricks bundle deployment bind genie_space <space-id> -t qa   --auto-approve
+databricks bundle deployment bind genie_space <space-id> -t prod --auto-approve
+```
+
+Each `<space-id>` is the last part of that environment's space URL (`.../genie/rooms/<id>`); the guard's
+error message also prints the right one. Run it as the identity that will deploy that environment.
 
 ### 1b. Check the access as the service principal, before the first deployment
 Genie runs every question as the service principal, not as you, so checking as yourself proves nothing: a
@@ -211,6 +242,8 @@ this repository's title and creates QA. From here on, editors just edit dev.
 | `403 PERMISSION_DENIED` … `Failed to fetch tables for the agent` on `bundle deploy` | no catalog grants for the service principal in *that* environment (grants are per catalog; dev working says nothing about qa) | the `GRANT` in step 1.3, against the target's catalog |
 | `net/url: invalid control character in URL` | a GitHub environment variable was saved with a trailing newline | re-enter `DATABRICKS_HOST` / `DATABRICKS_CLIENT_ID` for that environment. `scripts/check_settings.sh` now trims them and warns, but fix the value |
 | `UNRESOLVED_ALL_IN_GROUP_BY`, with a one-line query in the message | usually a symptom, not the cause: Genie wrote ad-hoc SQL instead of reusing a trusted example | check the row filter and grants first; it clears up once the data is visible |
+| `the plan would CREATE a space, but '…' already exists` | the bundle lost its record of the space: `deployment_root`, `bundle.name` or the deploying service principal changed | bind it back, once per environment — see [Why `root_path` has no user in it](#1a-why-root_path-has-no-user-in-it-and-what-to-do-when-you-move-it) |
+| `check_access.py` reports `[EMPTY]` | the identity can read the table but sees no rows — almost always a row filter | step 1.4 |
 | The `prod` job says *skipped* | working as designed: prod only runs from **Run workflow** with target `prod`, never from a push to main | Actions → **3 · Release** → Run workflow → *Deploy up to* `prod` |
 
 ## What happens when…
@@ -234,8 +267,9 @@ databricks.yml                          the promotion path dev / qa / prod (same
 resources/genie_space.genie_space.yml   the Genie space resource, built from config/project.yml
 src/genie_space.geniespace.json         the space's content (written by the workflows; created by bootstrap)
 scripts/check_space.py                  format checks of the JSON
+scripts/check_access.py                 can the deploying identity read the space's data? (runs before each deploy)
 scripts/describe_changes.py             the plain-words change list in pull requests
-scripts/deploy_guard.py                 reads `bundle plan`: keep / overwrite / refuse UI edits before deploying
+scripts/deploy_guard.py                 reads `bundle plan`: keep / overwrite / refuse UI edits; refuses to duplicate a space
 scripts/set_catalog.sh                  points the JSON at the qa / prod catalog (bundles don't resolve variables in it)
 scripts/open_pr.sh                      commits an export and opens or updates its pull request
 tests/smoke_test.py                     can the deployed space answer (SQL + rows)?
