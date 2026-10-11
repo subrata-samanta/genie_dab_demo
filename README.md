@@ -112,6 +112,8 @@ request to bring `main` back in line: merge it if the reset is permanent, close 
 
 ## Use this repository for another Genie space
 
+> Full field-by-field checklist: **[docs/new-space-checklist.md](docs/new-space-checklist.md)**.
+
 This repository is a template: **one repository per Genie space**. Everything specific to a space lives in
 `config/project.yml`; the workflows, scripts and tests are identical in every copy, so improvements made here
 can be copied forward without re-doing any configuration.

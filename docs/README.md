@@ -12,6 +12,7 @@ long version: how it works and why.
 |---|---|
 | **[architecture.md](architecture.md)** | The problem this solves, the flow end to end, the three environments, and why each guard exists. **Read this first.** |
 | **[workflows-and-scripts.md](workflows-and-scripts.md)** | Every workflow and every script: what it does, what it reads, what it returns |
+| **[new-space-checklist.md](new-space-checklist.md)** | Using this repository for another Genie space: the one file to edit, field by field, and everything to set up outside the repository |
 | **[configuration.md](configuration.md)** | Every setting and which file it lives in. What to change when you clone this for another space |
 | **[access-and-identity.md](access-and-identity.md)** | The permission model, the four gates, and how to verify them before deploying |
 | **[operations.md](operations.md)** | Promoting, rolling back, resetting dev, versions, troubleshooting |
@@ -26,10 +27,8 @@ out loud, because each guard looks like overhead until you know what it prevents
 [access-and-identity.md](access-and-identity.md#symptoms-and-their-causes). Between them they cover every failure
 this pipeline has actually produced.
 
-**Setting up a new space** — [operations.md](operations.md#set-up-another-genie-space) for the sequence,
-[configuration.md](configuration.md) for what to put in each field, and
-[access-and-identity.md](access-and-identity.md) for the Databricks side, which is the part that takes
-the time.
+**Setting up a new space** — [new-space-checklist.md](new-space-checklist.md). It is the only document
+you need: one file to edit, then the Databricks and GitHub setup, which is the part that takes the time.
 
 **Changing a script** — [workflows-and-scripts.md](workflows-and-scripts.md). Each entry says why the
 script exists, which matters more than what it does: most of them are guards against a specific failure,
